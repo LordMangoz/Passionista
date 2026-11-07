@@ -1,4 +1,4 @@
-# React + TypeScript + Vite
+# Passionista Client
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
@@ -34,6 +34,8 @@ export default defineConfig([
     ],
     languageOptions: {
       parserOptions: {
+    Install dependencies and start the Vite development server from this directory:
+
         project: ['./tsconfig.node.json', './tsconfig.app.json'],
         tsconfigRootDir: import.meta.dirname,
       },
@@ -56,8 +58,12 @@ export default defineConfig([
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
+  1. Create an Auth0 application configured as a **Single Page Application**.
+  2. Copy `.env.example` to `.env.local` and set `VITE_AUTH0_DOMAIN` and `VITE_AUTH0_CLIENT_ID` from the Auth0 application settings. Set `VITE_AUTH0_AUDIENCE` only if you have configured an API audience.
+  3. In the Auth0 application settings, add the development origin to **Allowed Callback URLs**, **Allowed Logout URLs**, and **Allowed Web Origins**. For the default Vite port, use `http://localhost:5173`.
+  4. Restart `npm run dev` after changing `.env.local`.
       // Other configs...
-      // Enable lint rules for React
+  The login and account creation buttons use Auth0 Universal Login. Enable the desired login methods, such as a database connection or social providers, in the Auth0 dashboard.
       reactX.configs['recommended-typescript'],
       // Enable lint rules for React DOM
       reactDom.configs.recommended,

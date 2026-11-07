@@ -1,122 +1,112 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useAuth0 } from "@auth0/auth0-react";
+import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+const hasAuth0Config = Boolean(
+  import.meta.env.VITE_AUTH0_DOMAIN &&
+  import.meta.env.VITE_AUTH0_CLIENT_ID,
+);
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+export default function App() {
+  return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
 }
 
-export default App
+function AuthExperience() {
+  const { isAuthenticated, isLoading, loginWithRedirect, logout } = useAuth0();
+
+  return (
+    <LandingPage
+      isAuthenticated={isAuthenticated}
+      isLoading={isLoading}
+      onSignIn={() => void loginWithRedirect()}
+      onSignUp={() =>
+        void loginWithRedirect({
+          authorizationParams: { screen_hint: "signup" },
+        })
+      }
+      onSignOut={() =>
+        void logout({ logoutParams: { returnTo: window.location.origin } })
+      }
+    />
+  );
+}
+
+function SetupNotice() {
+  return <LandingPage needsSetup />;
+}
+
+type LandingPageProps = {
+  isAuthenticated?: boolean;
+  isLoading?: boolean;
+  needsSetup?: boolean;
+  onSignIn?: () => void;
+  onSignUp?: () => void;
+  onSignOut?: () => void;
+};
+
+function LandingPage({
+  isAuthenticated = false,
+  isLoading = false,
+  needsSetup = false,
+  onSignIn,
+  onSignUp,
+  onSignOut,
+}: LandingPageProps) {
+  return (
+    <div className="landing-page">
+      <header className="site-header">
+        <a className="wordmark" href="/" aria-label="Passionista home">
+          passionista<span>.</span>
+        </a>
+        <nav className="header-actions" aria-label="Account">
+          {isAuthenticated ? (
+            <button className="header-button" type="button" onClick={onSignOut}>
+              Sign out <span aria-hidden="true">↗</span>
+            </button>
+          ) : (
+            <>
+              <button className="header-link" type="button" onClick={onSignIn} disabled={needsSetup || isLoading}>
+                Sign in
+              </button>
+              <button className="header-button" type="button" onClick={onSignUp} disabled={needsSetup || isLoading}>
+                Sign up <span aria-hidden="true">↗</span>
+              </button>
+            </>
+          )}
+        </nav>
+      </header>
+
+      <main className="hero">
+        <div className="hero-inner">
+          <p className="eyebrow"><span className="eyebrow-line" /> WELCOME TO PASSIONISTA</p>
+          <h1>Style begins<br />with <em>you.</em></h1>
+          <p className="description">A space to discover style inspiration, express yourself, and make every look your own.</p>
+
+          {isLoading ? (
+            <p className="account-status" role="status">Checking your account…</p>
+          ) : isAuthenticated ? (
+            <p className="account-status" role="status">You're signed in.</p>
+          ) : (
+            <div className="hero-actions">
+              <button className="primary-button" type="button" onClick={onSignUp} disabled={needsSetup}>
+                Sign up <span aria-hidden="true">↗</span>
+              </button>
+              <button className="secondary-button" type="button" onClick={onSignIn} disabled={needsSetup}>
+                Sign in
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="hero-decoration" aria-hidden="true">
+          <span className="decoration-ring" />
+          <span className="decoration-letter">P</span>
+          <span className="decoration-star">✳</span>
+        </div>
+      </main>
+
+      <footer className="site-footer">
+        <span>PASSIONISTA</span>
+        <span>YOUR STYLE YOUR WAY</span>
+      </footer>
+    </div>
+  );
+}
