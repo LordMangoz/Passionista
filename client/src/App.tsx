@@ -1,8 +1,7 @@
 import { useAuth0 } from "@auth0/auth0-react";
 
 const hasAuth0Config = Boolean(
-  import.meta.env.VITE_AUTH0_DOMAIN && 
-  import.meta.env.VITE_AUTH0_CLIENT_ID,
+  import.meta.env.VITE_AUTH0_DOMAIN && import.meta.env.VITE_AUTH0_CLIENT_ID,
 );
 
 export default function App() {
@@ -36,7 +35,9 @@ function AuthExperience() {
 function SetupNotice() {
   return (
     <main className="simple-auth-page">
-      <p>Set your Auth0 domain and client ID in <code>client/.env.local</code>.</p>
+      <p>
+        Set your Auth0 domain and client ID in <code>client/.env.local</code>.
+      </p>
     </main>
   );
 }
