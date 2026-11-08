@@ -10,19 +10,26 @@ const hasAuth0Config = Boolean(
 );
 
 export default function App() {
-  if (window.location.pathname.replace(/\/$/, "") === "/stylist") {
+  const path = window.location.pathname.replace(/\/$/, "");
+
+  if (path === "/stylist") {
     return <StylistPage />;
+  }
+
+  if (path === "/wardrobe") {
+    return hasAuth0Config ? <AuthenticatedWardrobe /> : <Wardrobe />;
   }
 
   return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
 }
 
+function AuthenticatedWardrobe() {
+  const { isAuthenticated, user } = useAuth0();
+  return <Wardrobe userId={isAuthenticated ? user?.sub : undefined} />;
+}
+
 function AuthExperience() {
   const { isAuthenticated, isLoading, loginWithRedirect, logout } = useAuth0();
-
-  if (isAuthenticated) {
-    return <Wardrobe />;
-  }
 
   return (
     <LandingPage
