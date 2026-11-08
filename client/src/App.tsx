@@ -1,5 +1,6 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import "./App.css";
+import Wardrobe from "./WardrobePage/Wardrobe/Wardrobe";
 
 const hasAuth0Config = Boolean(
   import.meta.env.VITE_AUTH0_DOMAIN &&
@@ -13,14 +14,19 @@ export default function App() {
 function AuthExperience() {
   const { isAuthenticated, isLoading, loginWithRedirect, logout } = useAuth0();
 
+  if (isAuthenticated) {
+    return <Wardrobe />;
+  }
+
   return (
     <LandingPage
       isAuthenticated={isAuthenticated}
       isLoading={isLoading}
-      onSignIn={() => void loginWithRedirect()}
+      onSignIn={() => void loginWithRedirect({ appState: { returnTo: "/wardrobe" } })}
       onSignUp={() =>
         void loginWithRedirect({
           authorizationParams: { screen_hint: "signup" },
+          appState: { returnTo: "/wardrobe" },
         })
       }
       onSignOut={() =>
@@ -83,7 +89,7 @@ function LandingPage({
           {isLoading ? (
             <p className="account-status" role="status">Checking your account…</p>
           ) : isAuthenticated ? (
-            <p className="account-status" role="status">You're signed in.</p>
+            <p className="account-status" role="status">You are signed in.</p>
           ) : (
             <div className="hero-actions">
               <button className="primary-button" type="button" onClick={onSignUp} disabled={needsSetup}>
