@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 config({ path: "../.env" });
 import express from "express";
+import { fileURLToPath } from "node:url";
 import { auth } from "express-oauth2-jwt-bearer";
 import { imageRouter } from "./routes/imageRouter";
 
@@ -15,6 +16,7 @@ const auth0IssuerBaseURL = `${
 }`.replace(/\/+$/, "") + "/";
 
 const app = express();
+const clientDist = fileURLToPath(new URL("../client/dist", import.meta.url));
 
 app.use(express.json());
 
@@ -23,6 +25,15 @@ app.use(
   auth({ issuerBaseURL: auth0IssuerBaseURL, audience: auth0Audience }),
   imageRouter
 );
+
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "API route not found" });
+});
+
+app.use(express.static(clientDist));
+app.get(/.*/, (_req, res) => {
+  res.sendFile(fileURLToPath(new URL("../client/dist/index.html", import.meta.url)));
+});
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const statusCode =
@@ -42,7 +53,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   });
 });
 
-
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
+const port = Number(process.env.PORT) || 3000;
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
