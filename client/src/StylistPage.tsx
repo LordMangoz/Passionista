@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
+import PageMenu from "./PageMenu";
 import "./StylistPage.css";
 
 const questions = [
@@ -168,7 +169,7 @@ export default function StylistPage() {
             passionista<span>.</span>
             </a>
             <span className="stylist-header-title">THE STYLIST STUDIO</span>
-            <a className="stylist-home-link" href="/">Back to home</a>
+            <PageMenu current="stylist" />
         </header>
     
         <main className="stylist-main">

@@ -1,4 +1,5 @@
 import { useAuth0 } from "@auth0/auth0-react";
+import PageMenu from "./PageMenu";
 import StylistPage from "./StylistPage";
 import "./App.css";
 import Wardrobe from "./WardrobePage/Wardrobe/Wardrobe";
@@ -67,22 +68,7 @@ function LandingPage({
         <a className="wordmark" href="/" aria-label="Passionista home">
           passionista<span>.</span>
         </a>
-        <nav className="header-actions" aria-label="Account">
-          {/* {isAuthenticated ? (
-            <button className="header-button" type="button" onClick={onSignOut}>
-              Sign out <span aria-hidden="true">↗</span>
-            </button>
-          ) : (
-            <>
-              <button className="header-link" type="button" onClick={onSignIn} disabled={needsSetup || isLoading}>
-                Sign in
-              </button>
-              <button className="header-button" type="button" onClick={onSignUp} disabled={needsSetup || isLoading}>
-                Sign up <span aria-hidden="true">↗</span>
-              </button>
-            </>
-          )} */}
-        </nav>
+        <PageMenu current="home" />
       </header>
 
       <main className="hero">
