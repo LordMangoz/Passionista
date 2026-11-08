@@ -1,43 +1,112 @@
 import { useAuth0 } from "@auth0/auth0-react";
+import "./App.css";
 
 const hasAuth0Config = Boolean(
-  import.meta.env.VITE_AUTH0_DOMAIN && import.meta.env.VITE_AUTH0_CLIENT_ID,
+  import.meta.env.VITE_AUTH0_DOMAIN &&
+  import.meta.env.VITE_AUTH0_CLIENT_ID,
 );
 
 export default function App() {
-  if (!hasAuth0Config) {
-    return <SetupNotice />;
-  }
-
-  return <AuthExperience />;
+  return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
 }
 
 function AuthExperience() {
-  const { isAuthenticated, loginWithRedirect, logout } = useAuth0();
+  const { isAuthenticated, isLoading, loginWithRedirect, logout } = useAuth0();
 
   return (
-    <main className="simple-auth-page">
-      <button
-        className="simple-auth-button"
-        onClick={() =>
-          isAuthenticated
-            ? logout({ logoutParams: { returnTo: window.location.origin } })
-            : loginWithRedirect()
-        }
-        type="button"
-      >
-        {isAuthenticated ? "Sign out" : "Sign in"}
-      </button>
-    </main>
+    <LandingPage
+      isAuthenticated={isAuthenticated}
+      isLoading={isLoading}
+      onSignIn={() => void loginWithRedirect()}
+      onSignUp={() =>
+        void loginWithRedirect({
+          authorizationParams: { screen_hint: "signup" },
+        })
+      }
+      onSignOut={() =>
+        void logout({ logoutParams: { returnTo: window.location.origin } })
+      }
+    />
   );
 }
 
 function SetupNotice() {
+  return <LandingPage needsSetup />;
+}
+
+type LandingPageProps = {
+  isAuthenticated?: boolean;
+  isLoading?: boolean;
+  needsSetup?: boolean;
+  onSignIn?: () => void;
+  onSignUp?: () => void;
+  onSignOut?: () => void;
+};
+
+function LandingPage({
+  isAuthenticated = false,
+  isLoading = false,
+  needsSetup = false,
+  onSignIn,
+  onSignUp,
+  onSignOut,
+}: LandingPageProps) {
   return (
-    <main className="simple-auth-page">
-      <p>
-        Set your Auth0 domain and client ID in <code>client/.env.local</code>.
-      </p>
-    </main>
+    <div className="landing-page">
+      <header className="site-header">
+        <a className="wordmark" href="/" aria-label="Passionista home">
+          passionista<span>.</span>
+        </a>
+        <nav className="header-actions" aria-label="Account">
+          {isAuthenticated ? (
+            <button className="header-button" type="button" onClick={onSignOut}>
+              Sign out <span aria-hidden="true">↗</span>
+            </button>
+          ) : (
+            <>
+              <button className="header-link" type="button" onClick={onSignIn} disabled={needsSetup || isLoading}>
+                Sign in
+              </button>
+              <button className="header-button" type="button" onClick={onSignUp} disabled={needsSetup || isLoading}>
+                Sign up <span aria-hidden="true">↗</span>
+              </button>
+            </>
+          )}
+        </nav>
+      </header>
+
+      <main className="hero">
+        <div className="hero-inner">
+          <p className="eyebrow"><span className="eyebrow-line" /> WELCOME TO PASSIONISTA</p>
+          <h1>Style begins<br />with <em>you.</em></h1>
+          <p className="description">A space to discover style inspiration, express yourself, and make every look your own.</p>
+
+          {isLoading ? (
+            <p className="account-status" role="status">Checking your account…</p>
+          ) : isAuthenticated ? (
+            <p className="account-status" role="status">You're signed in.</p>
+          ) : (
+            <div className="hero-actions">
+              <button className="primary-button" type="button" onClick={onSignUp} disabled={needsSetup}>
+                Sign up <span aria-hidden="true">↗</span>
+              </button>
+              <button className="secondary-button" type="button" onClick={onSignIn} disabled={needsSetup}>
+                Sign in
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="hero-decoration" aria-hidden="true">
+          <span className="decoration-ring" />
+          <span className="decoration-letter">P</span>
+          <span className="decoration-star">✳</span>
+        </div>
+      </main>
+
+      <footer className="site-footer">
+        <span>PASSIONISTA</span>
+        <span>YOUR STYLE YOUR WAY</span>
+      </footer>
+    </div>
   );
 }
