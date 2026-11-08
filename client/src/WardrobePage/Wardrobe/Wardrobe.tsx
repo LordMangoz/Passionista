@@ -6,6 +6,8 @@ import type { WardrobeItem } from "../WardrobeItem";
  * The Actual Wardrobe Page, generates
  * each item under the user's wardrobe on the database.
  */
+
+const currentUserId:number = 10; 
 export default function Wardrobe() {
   // for each card in the user's "wardrobe" (databricks database)
   // generate a wardrobe card.
