@@ -144,7 +144,7 @@ async function getVolumeFile(path: string): Promise<Buffer> {
 const IMAGE_INSERT = `
 INSERT INTO ${IMAGES_TABLE}
 (image_id, user_id, file_name, file_path, mime_type, size_bytes, tags, caption, status, uploaded_at, tagged_at)
-VALUES (:image_id, :user_id, :file_name, :file_path, :mime_type, :size_bytes, NULL, NULL, 'uploaded', current_timestamp(), NULL)`;
+VALUES (:image_id, :user_id, :file_name, :file_path, :mime_type, :size_bytes, NULL, NULL, :status, current_timestamp(), NULL)`;
 
 const ITEMS_INGEST = `
 MERGE INTO ${ITEMS_TABLE} AS target
@@ -251,14 +251,14 @@ async function analyzeWithGemini(
   mime: string
 ): Promise<{ caption: string; items: Record<string, unknown>[]; raw: string }> {
   let lastErr: unknown;
-  for (const model of GEMINI_MODELS) {
+  modelLoop: for (const model of GEMINI_MODELS) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY()}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY() },
             body: JSON.stringify({
               contents: [
                 {
@@ -274,7 +274,12 @@ async function analyzeWithGemini(
           }
         );
         // Google flash models throw transient 503s under congestion — back off and retry
-        if (res.status === 503 || res.status === 429) {
+        if (res.status === 429 || res.status === 402) {
+          lastErr = new HttpError(503, `Gemini quota or billing unavailable (HTTP ${res.status})`);
+          continue modelLoop;
+        }
+        if (res.status === 503) {
+          lastErr = new Error(`Gemini ${model} is temporarily unavailable (HTTP 503)`);
           await sleep(1200 * attempt);
           continue;
         }
@@ -290,6 +295,7 @@ async function analyzeWithGemini(
         }
         return { caption: String(parsed.caption), items: parsed.items, raw };
       } catch (e) {
+        if (e instanceof HttpError) throw e;
         lastErr = e;
       }
     }
@@ -383,33 +389,37 @@ const upload = multer({
 
 export const imageRouter = Router();
 
+async function storeUploadedImage(
+  user_id: string,
+  file: Express.Multer.File,
+  status: "uploaded" | "reference"
+): Promise<string> {
+  const image_id = crypto.randomUUID();
+  const safe_name = file.originalname
+    .split(/[\\/]/)
+    .pop()!
+    .replace(/[^a-zA-Z0-9._-]/g, "_");
+  const file_path = `${VOLUME_IMAGES_ROOT}/${user_id}/${image_id}_${safe_name}`;
+  await putVolumeFile(file_path, file.buffer, file.mimetype);
+  await runStatement(IMAGE_INSERT, [
+    { name: "image_id", value: image_id },
+    { name: "user_id", value: user_id },
+    { name: "file_name", value: file.originalname },
+    { name: "file_path", value: file_path },
+    { name: "mime_type", value: file.mimetype },
+    { name: "size_bytes", value: file.size, type: "INT" },
+    { name: "status", value: status },
+  ]);
+  return image_id;
+}
+
 /** POST /api/images — multipart field "image". Stores + registers; tags in background. */
 imageRouter.post("/images", upload.single("image"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user_id = getUserId(req);
     if (!req.file) throw new HttpError(400, "multipart field 'image' is required");
 
-    const image_id = crypto.randomUUID();
-    const safe_name = req.file.originalname
-  .split(/[\\/]/)
-  .pop()!
-  .replace(/[^a-zA-Z0-9._-]/g, "_");
-    const file_path = `${VOLUME_IMAGES_ROOT}/${user_id}/${image_id}_${safe_name}`;
-
-    // 1. Bytes -> volume
-    await putVolumeFile(file_path, req.file.buffer, req.file.mimetype);
-
-    // 2. Metadata row (status='uploaded')
-    await runStatement(IMAGE_INSERT, [
-      { name: "image_id", value: image_id },
-      { name: "user_id", value: user_id },
-      { name: "file_name", value: req.file.originalname },
-      { name: "file_path", value: file_path },
-      { name: "mime_type", value: req.file.mimetype },
-      { name: "size_bytes", value: req.file.size, type: "INT" },
-    ]);
-
-    // 3. Kick off background Gemini tagging — response returns immediately
+    const image_id = await storeUploadedImage(user_id, req.file, "uploaded");
     void tagImageInBackground(user_id, image_id, req.file.buffer.toString("base64"), req.file.mimetype);
 
     res.status(202).json({ image_id, status: "uploaded" });
@@ -418,8 +428,20 @@ imageRouter.post("/images", upload.single("image"), async (req: Request, res: Re
   }
 });
 
+// Save a shop photo only when the user chooses to save an outfit; it is not tagged as owned clothing.
+imageRouter.post("/stylist/images", upload.single("image"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    if (!req.file) throw new HttpError(400, "multipart field 'image' is required");
+    const image_id = await storeUploadedImage(user_id, req.file, "reference");
+    res.status(201).json({ image_id, status: "reference" });
+  } catch (error) {
+    next(error);
+  }
+});
 
-// answer questions for sytlist in a easy way.
+
+// Answer a stylist question using the photo and the user's wardrobe context.
 async function answerStylistQuestion(
   base64: string,
   mime: string,
@@ -428,14 +450,14 @@ async function answerStylistQuestion(
 ): Promise<string> {
   let lastErr: unknown;
 
-  for (const model of GEMINI_MODELS) {
+  modelLoop: for (const model of GEMINI_MODELS) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY()}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY() },
             body: JSON.stringify({
               contents: [
                 {
@@ -446,14 +468,19 @@ async function answerStylistQuestion(
                 }
               ],
               generationConfig: structured
-                ? { responseMimeType: "application/json", temperature: 0.4 }
-                : { temperature: 0.4 }
+                ? { responseMimeType: "application/json", temperature: 0.5, maxOutputTokens: 1024 }
+                : { temperature: 0.5, maxOutputTokens: 160 }
             }),
             signal: AbortSignal.timeout(30_000)
           }
         );
 
-        if (res.status === 503 || res.status === 429) {
+        if (res.status === 429 || res.status === 402) {
+          lastErr = new HttpError(503, "Gemini quota or billing is unavailable. Please try again later.");
+          continue modelLoop;
+        }
+        if (res.status === 503) {
+          lastErr = new Error(`Gemini ${model} is temporarily unavailable (HTTP 503)`);
           await sleep(1200 * attempt);
           continue;
         }
@@ -472,207 +499,200 @@ async function answerStylistQuestion(
           throw new Error("Gemini returned an empty answer");
         }
 
-        return answer;
+        return answer.trim();
       } catch (e) {
+        if (e instanceof HttpError) throw e;
         lastErr = e;
       }
     }
   }
 
-  throw lastErr instanceof Error
-    ? lastErr
-    : new Error("Gemini failed after all retries/fallbacks");
+  console.error("[stylist] Gemini request failed:", lastErr);
+  if (lastErr instanceof HttpError) throw lastErr;
+  throw new HttpError(503, "The AI stylist is unavailable right now. Please try again later.");
 }
 
 
-// answer for specfic question.
-// POST /api/images/:id/ask — ask Gemini a question about an uploaded image.
+const STYLIST_PROMPTS = {
+  identify: "In one sentence, identify the main clothing item, its color, and one standout visible detail. Don't add an opinion or outfit advice.",
+  "my-style": "Give a quick, honest take on whether this suits the user's wardrobe, with one specific reason. If the wardrobe is empty, say you don't know their style yet, then describe the kind of look this piece suits.",
+  "wardrobe-match": "Put together one wearable look from the user's owned pieces that works with this item. Never invent owned items or IDs.",
+  "outfit-ideas": "Give two different, easy ways to wear this item. Keep each idea to one short sentence. Use wardrobe pieces when they fit; make it clear when another piece is only a suggestion."
+} as const;
+
+type StylistQuestionId = keyof typeof STYLIST_PROMPTS;
+type WardrobeMatchItem = {
+  clothing_item_id: string;
+  image_id: string;
+  category: string;
+  subcategory: string;
+  primary_color: string;
+  style_tags: string;
+};
+
+function getStylistQuestionId(value: unknown): StylistQuestionId {
+  if (typeof value !== "string" || !Object.hasOwn(STYLIST_PROMPTS, value)) {
+    throw new HttpError(400, "Invalid question ID");
+  }
+  return value as StylistQuestionId;
+}
+
+async function answerStylistForPhoto(
+  user_id: string,
+  questionValue: unknown,
+  base64: string,
+  mime: string,
+  excludedImageId?: string
+): Promise<{ answer: string; matches?: Array<WardrobeMatchItem & { name: string; reason: string }> }> {
+  const questionID = getStylistQuestionId(questionValue);
+  const voice = [
+    "Sound like a thoughtful stylist giving a friend quick advice, not a product description.",
+    "Lead with the useful observation or opinion. Use everyday words and natural contractions.",
+    "Mention a detail you can actually see in the photo. Don't guess at unseen details or the user's taste.",
+    "Skip greetings, headings, lists, filler, fashion clichés, generic praise, rhetorical questions, and any mention of AI.",
+    "Avoid stiff openings such as 'This item is' or 'Based on the image'."
+  ].join(" ");
+
+  if (questionID === "wardrobe-match") {
+    const wardrobeRows = await runStatement(
+      `SELECT item.clothing_item_id, item.image_id, item.category, item.subcategory,
+              item.primary_color, item.style_tags
+       FROM ${ITEMS_TABLE} AS item
+       INNER JOIN ${IMAGES_TABLE} AS source
+         ON item.image_id = source.image_id AND item.user_id = source.user_id
+       WHERE item.user_id = :user_id AND source.status = 'tagged'
+       ${excludedImageId ? "AND item.image_id <> :image_id" : ""}
+       ORDER BY item.created_at DESC
+       LIMIT 100`,
+      [
+        { name: "user_id", value: user_id },
+        ...(excludedImageId ? [{ name: "image_id", value: excludedImageId }] : []),
+      ]
+    );
+
+    const wardrobeItems: WardrobeMatchItem[] = wardrobeRows.map((row) => ({
+      clothing_item_id: String(row[0]),
+      image_id: String(row[1]),
+      category: String(row[2] ?? ""),
+      subcategory: String(row[3] ?? ""),
+      primary_color: String(row[4] ?? ""),
+      style_tags: String(row[5] ?? ""),
+    }));
+    if (wardrobeItems.length === 0) {
+      return { answer: "Add a few pieces to your wardrobe to get matches for this item.", matches: [] };
+    }
+
+    const prompt = `${voice}\n\n${STYLIST_PROMPTS[questionID]}
+      Write the answer in one or two natural sentences, at most 45 words. Keep each match reason under 12 words.
+      The answer and reasons should sound like outfit advice, not a list of catalog attributes.
+      Return pieces in visual top-to-bottom order: tops or dresses, outerwear, bottoms,
+      socks, shoes, then other accessories. Put socks before shoes.
+      Select exact IDs only from this wardrobe catalog: ${JSON.stringify(wardrobeItems)}
+      Return only JSON in this shape:
+      {"answer":"brief outfit advice","matches":[{"clothing_item_id":"exact catalog ID","reason":"brief reason"}]}
+      Use an empty matches array when no catalog pieces work.`;
+    const raw = await answerStylistQuestion(base64, mime, prompt, true);
+    let recommendation: unknown;
+    try {
+      recommendation = JSON.parse(raw);
+    } catch {
+      throw new HttpError(502, "The stylist returned an invalid outfit recommendation. Please try again.");
+    }
+    if (
+      !recommendation || typeof recommendation !== "object" ||
+      !("answer" in recommendation) || typeof recommendation.answer !== "string" ||
+      !("matches" in recommendation) || !Array.isArray(recommendation.matches)
+    ) {
+      throw new HttpError(502, "The stylist returned an invalid outfit recommendation. Please try again.");
+    }
+
+    const wardrobeById = new Map(wardrobeItems.map((item) => [item.clothing_item_id, item]));
+    const seen = new Set<string>();
+    const matches = recommendation.matches.flatMap((entry) => {
+      if (
+        !entry || typeof entry !== "object" ||
+        !("clothing_item_id" in entry) || typeof entry.clothing_item_id !== "string" ||
+        seen.has(entry.clothing_item_id)
+      ) return [];
+      const item = wardrobeById.get(entry.clothing_item_id);
+      if (!item) return [];
+      seen.add(item.clothing_item_id);
+      const name = [item.subcategory || item.category, item.primary_color]
+        .filter(Boolean).join(" · ");
+      return [{
+        ...item,
+        name: name || "Wardrobe item",
+        reason: "reason" in entry && typeof entry.reason === "string" ? entry.reason : "",
+      }];
+    }).slice(0, 6);
+    return { answer: recommendation.answer.trim(), matches };
+  }
+
+  let wardrobeContext = "";
+  if (questionID !== "identify") {
+    const wardrobeRows = await runStatement(
+      `SELECT item.category, item.subcategory, item.primary_color, item.style_tags,
+              item.formality, item.season
+       FROM ${ITEMS_TABLE} AS item
+       INNER JOIN ${IMAGES_TABLE} AS source
+         ON item.image_id = source.image_id AND item.user_id = source.user_id
+       WHERE item.user_id = :user_id AND source.status = 'tagged'
+       ORDER BY item.created_at DESC`,
+      [{ name: "user_id", value: user_id }]
+    );
+    const wardrobe = wardrobeRows.map((row) => ({
+      category: row[0], subcategory: row[1], primary_color: row[2],
+      style_tags: row[3], formality: row[4], season: row[5]
+    }));
+    wardrobeContext = wardrobe.length
+      ? `These are the user's owned wardrobe items: ${JSON.stringify(wardrobe)}. Do not invent owned items.`
+      : "The user's wardrobe is empty. Do not claim they own any clothing items.";
+  }
+
+  const prompt = [
+    voice,
+    "Reply in plain text, under 45 words, or under 60 words for outfit ideas.",
+    STYLIST_PROMPTS[questionID],
+    wardrobeContext
+  ].filter(Boolean).join("\n\n");
+  const answer = await answerStylistQuestion(base64, mime, prompt);
+  return { answer };
+}
+
+// Shop photos are analyzed without being added to the owned wardrobe.
+imageRouter.post("/stylist/ask", upload.single("image"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    if (!req.file) throw new HttpError(400, "multipart field 'image' is required");
+    const result = await answerStylistForPhoto(
+      user_id, req.body?.questionID, req.file.buffer.toString("base64"), req.file.mimetype
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Questions about previously uploaded images remain available to existing clients.
 imageRouter.post("/images/:id/ask", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user_id = getUserId(req);
     const image_id = req.params.id;
     if (typeof image_id !== "string") throw new HttpError(400, "Invalid image ID");
-    const questionID = req.body.questionID;
-
-    // Select the appropriate prompt.
-    const prompts: Record<string, string> = {
-      identify: "Identify the clothing items in this image. Describe their appearance, colors, materials, and style.",
-
-      "my-style": "Evaluate whether the clothing in this image fits the user's personal style. Use their existing wardrobe as context. Explain why it does or does not fit.",
-
-      "wardrobe-match": "Choose the best matching items from the user's wardrobe for an outfit with the clothing in this image. Explain briefly why the combination works.",
-
-      "outfit-ideas": "Suggest several outfits incorporating the clothing shown in this image. Explain how to style the item, including suitable colors, clothing, and accessories."
-    };
-
-    const prompt = prompts[questionID];
-
-    if (!prompt) {
-      throw new HttpError(400, "Invalid question ID");
-    }
-
-    // Retrieve the image, ensuring it belongs to the authenticated user.
     const imageRows = await runStatement(
-      `SELECT file_path, mime_type
-       FROM ${IMAGES_TABLE}
+      `SELECT file_path, mime_type FROM ${IMAGES_TABLE}
        WHERE image_id = :image_id AND user_id = :user_id`,
       [
         { name: "image_id", value: image_id },
-        { name: "user_id", value: user_id }
+        { name: "user_id", value: user_id },
       ]
     );
-
-    if (!imageRows.length) {
-      throw new HttpError(404, "Image not found");
-    }
-
-    // Download image bytes from Databricks.
+    if (!imageRows.length) throw new HttpError(404, "Image not found");
     const bytes = await getVolumeFile(String(imageRows[0][0]));
-    const mime = String(imageRows[0][1]);
-    const base64 = bytes.toString("base64");
-
-    // Retrieve wardrobe context for questions that need personal style information.
-    let wardrobeContext = "";
-    let wardrobeItems: {
-      clothing_item_id: string;
-      image_id: string;
-      category: string;
-      subcategory: string;
-      primary_color: string;
-      style_tags: string;
-    }[] = [];
-
-    if (questionID === "wardrobe-match") {
-      const wardrobeRows = await runStatement(
-        `SELECT item.clothing_item_id, item.image_id, item.category, item.subcategory,
-                item.primary_color, item.style_tags
-         FROM ${ITEMS_TABLE} AS item
-         INNER JOIN ${IMAGES_TABLE} AS source
-           ON item.image_id = source.image_id AND item.user_id = source.user_id
-         WHERE item.user_id = :user_id
-           AND item.image_id <> :image_id
-           AND source.status = 'tagged'
-         ORDER BY item.created_at DESC
-         LIMIT 100`,
-        [
-          { name: "user_id", value: user_id },
-          { name: "image_id", value: image_id },
-        ]
-      );
-
-      wardrobeItems = wardrobeRows.map((row) => ({
-        clothing_item_id: String(row[0]),
-        image_id: String(row[1]),
-        category: String(row[2] ?? ""),
-        subcategory: String(row[3] ?? ""),
-        primary_color: String(row[4] ?? ""),
-        style_tags: String(row[5] ?? ""),
-      }));
-
-      if (wardrobeItems.length === 0) {
-        res.json({
-          answer: "Your wardrobe does not have any other tagged items to compare yet.",
-          matches: [],
-        });
-        return;
-      }
-
-      wardrobeContext = `
-        Select matches only from this user's wardrobe catalog. Never invent an item or ID.
-        Choose up to 6 pieces that make a cohesive outfit with the uploaded item.
-        Return pieces in visual top-to-bottom order: tops or dresses, outerwear, bottoms,
-        socks, shoes, then other accessories. In particular, put socks before shoes.
-        Wardrobe catalog:
-        ${JSON.stringify(wardrobeItems)}
-
-        Return only JSON in this exact shape:
-        {"answer":"brief outfit advice","matches":[{"clothing_item_id":"exact catalog ID","reason":"brief reason"}]}
-        Use an empty matches array when no catalog pieces work.
-      `;
-    } else if (questionID === "my-style" || questionID === "outfit-ideas") {
-      const wardrobeRows = await runStatement(
-        `SELECT category, subcategory, primary_color, style_tags, formality, season
-         FROM ${ITEMS_TABLE}
-         WHERE user_id = :user_id
-         ORDER BY created_at DESC`,
-        [{ name: "user_id", value: user_id }]
-      );
-
-      const wardrobe = wardrobeRows.map((r) => ({
-        category: r[0],
-        subcategory: r[1],
-        primary_color: r[2],
-        style_tags: r[3],
-        formality: r[4],
-        season: r[5]
-      }));
-
-      wardrobeContext = `
-        The user's existing wardrobe:
-        ${JSON.stringify(wardrobe)}
-
-        Use this information as context. Do not invent clothing items
-        that are not present in the wardrobe.
-      `;
-    }
-
-    // Ask Gemini about the image.
-    const answer = await answerStylistQuestion(
-      base64,
-      mime,
-      `${prompt}\n\n${wardrobeContext}`,
-      questionID === "wardrobe-match"
+    const result = await answerStylistForPhoto(
+      user_id, req.body?.questionID, bytes.toString("base64"), String(imageRows[0][1]), image_id
     );
-
-    if (questionID === "wardrobe-match") {
-      let recommendation: unknown;
-      try {
-        recommendation = JSON.parse(answer);
-      } catch {
-        throw new HttpError(502, "The stylist returned an invalid outfit recommendation. Please try again.");
-      }
-
-      if (
-        !recommendation ||
-        typeof recommendation !== "object" ||
-        !("answer" in recommendation) ||
-        typeof recommendation.answer !== "string" ||
-        !("matches" in recommendation) ||
-        !Array.isArray(recommendation.matches)
-      ) {
-        throw new HttpError(502, "The stylist returned an invalid outfit recommendation. Please try again.");
-      }
-
-      const wardrobeById = new Map(wardrobeItems.map((item) => [item.clothing_item_id, item]));
-      const seen = new Set<string>();
-      const matches = recommendation.matches.flatMap((entry) => {
-        if (
-          !entry ||
-          typeof entry !== "object" ||
-          !("clothing_item_id" in entry) ||
-          typeof entry.clothing_item_id !== "string" ||
-          seen.has(entry.clothing_item_id)
-        ) return [];
-
-        const item = wardrobeById.get(entry.clothing_item_id);
-        if (!item) return [];
-        seen.add(item.clothing_item_id);
-        const name = [item.subcategory || item.category, item.primary_color]
-          .filter(Boolean)
-          .join(" · ");
-
-        return [{
-          ...item,
-          name: name || "Wardrobe item",
-          reason: "reason" in entry && typeof entry.reason === "string" ? entry.reason : "",
-        }];
-      }).slice(0, 6);
-
-      res.json({ answer: recommendation.answer, matches });
-      return;
-    }
-
-    res.json({ answer });
+    res.json(result);
   } catch (error) {
     next(error);
   }

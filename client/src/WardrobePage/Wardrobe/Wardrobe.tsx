@@ -425,6 +425,7 @@ export default function Wardrobe() {
       setUploadOpen(false);
       setUploadMessage("Added to your Databricks wardrobe.");
     } catch (error) {
+      setUploadMessage("");
       setUploadError(error instanceof Error ? error.message : "Could not upload photo.");
     } finally {
       setIsSaving(false);

@@ -99,9 +99,8 @@ function LandingPage({
             </div>
           )}
         </div>
-        <div className="hero-decoration" aria-hidden="true">
-          <span className="decoration-ring" />
-          <span className="decoration-letter">P</span>
+        <div className="hero-visual">
+          <img src="/landing-hero.jpg" alt="A rack of clothes being browsed" />
         </div>
       </main>
 

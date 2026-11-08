@@ -43,7 +43,7 @@ type StylistResult = {
   answer: string;
   matches?: StylistMatch[];
 };
-type ResultState = "idle" | "loading" | "ready" | "unavailable" | "error";
+type ResultState = "idle" | "loading" | "ready" | "error";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -107,7 +107,7 @@ export default function StylistPage() {
     if (!nextFile) return;
     clearAnalysis();
     if (!ACCEPTED_IMAGE_TYPES.includes(nextFile.type)) {
-      setErrorMessage("Choose a JPG or PNG image.");
+      setErrorMessage("Choose a JPG, PNG, or WebP image.");
       return;
     }
     if (nextFile.size > MAX_IMAGE_SIZE) {
@@ -115,8 +115,6 @@ export default function StylistPage() {
       return;
     }
     setImageId(null);
-
-
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     
     const nextUrl = URL.createObjectURL(nextFile);
@@ -145,8 +143,7 @@ export default function StylistPage() {
     setFile(null);
   }
 
-  //grabs data and passes into backend route for gemini response.
-  // posts using the question id. 
+  // Send the shop photo for this question without saving it to the wardrobe.
 async function askStylist() {
   if (!file || !isAuthenticated || isAuthLoading) return;
 
@@ -164,46 +161,16 @@ async function askStylist() {
     const accessToken = await getAccessTokenSilently({
       authorizationParams: { audience: auth0Audience },
     });
-    let activeImageId = imageId;
+    const body = new FormData();
+    body.append("image", file);
+    body.append("questionID", selectedQuestion.id);
 
-    // 1. Upload the image if it hasn't been uploaded yet.
-    if (!activeImageId) {
-      const uploadBody = new FormData();
-      uploadBody.append("image", file);
-
-      const uploadResponse = await fetch("/api/images", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: uploadBody,
-        signal: controller.signal,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error(await getApiError(uploadResponse, "Image upload failed"));
-      }
-
-      const uploadData = await uploadResponse.json();
-
-      if (!uploadData.image_id) {
-        throw new Error("The server did not return an image ID.");
-      }
-
-      activeImageId = uploadData.image_id;
-      setImageId(activeImageId);
-    }
-
-    // 2. Ask the stylist about the uploaded image.
-    const response = await fetch(`/api/images/${activeImageId}/ask`, {
+    const response = await fetch("/api/stylist/ask", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        questionID: selectedQuestion.id,
-      }),
+      body,
       signal: controller.signal,
     });
 
@@ -315,7 +282,7 @@ function outfitOrder(match: Pick<StylistMatch, "category" | "subcategory">): num
 }
 
 async function saveStylistOutfit() {
-  if (!imageId || !result?.matches?.length || isSavingOutfit) return;
+  if (!file || !result?.matches?.length || isSavingOutfit) return;
   setIsSavingOutfit(true);
   setOutfitSaveMessage("");
   setOutfitSaveError("");
@@ -326,6 +293,27 @@ async function saveStylistOutfit() {
     });
     if (!accessToken) throw new Error("Auth0 did not return an access token.");
 
+    let sourceImageId = imageId;
+    if (!sourceImageId) {
+      const photoBody = new FormData();
+      photoBody.append("image", file);
+      const photoResponse = await fetch("/api/stylist/images", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: photoBody,
+      });
+      if (!photoResponse.ok) {
+        throw new Error(await getApiError(photoResponse, "Could not save the starting photo"));
+      }
+      const uploaded: unknown = await photoResponse.json();
+      if (!uploaded || typeof uploaded !== "object" ||
+          !("image_id" in uploaded) || typeof uploaded.image_id !== "string") {
+        throw new Error("The server did not return an image ID.");
+      }
+      sourceImageId = uploaded.image_id;
+      setImageId(sourceImageId);
+    }
+
     const response = await fetch("/api/outfits", {
       method: "POST",
       headers: {
@@ -334,7 +322,7 @@ async function saveStylistOutfit() {
       },
       body: JSON.stringify({
         name: `Outfit with ${file?.name.replace(/\.[^.]+$/, "") || "your piece"}`.slice(0, 80),
-        source_image_id: imageId,
+        source_image_id: sourceImageId,
         clothing_item_ids: result.matches.map((match) => match.clothing_item_id),
       }),
     });
@@ -451,7 +439,7 @@ async function getApiError(response: Response, fallback: string): Promise<string
                     Choose a photo <span aria-hidden="true">↗</span>
                     </button>
     
-                    <span className="file-hint">JPG or PNG · UP TO 10 MB</span>
+                    <span className="file-hint">JPG, PNG, OR WEBP · UP TO 10 MB</span>
                 </div>
                 )}
     
@@ -532,7 +520,7 @@ async function getApiError(response: Response, fallback: string): Promise<string
                     type="button"
                     className={`question-card ${selectedQuestionId === question.id ? "is-selected" : ""}`}
                     aria-pressed={selectedQuestionId === question.id}
-                    onClick={async () => {
+                    onClick={() => {
                         setSelectedQuestionId(question.id);
                         clearAnalysis();
                     }}
@@ -573,8 +561,6 @@ async function getApiError(response: Response, fallback: string): Promise<string
                     <p role={resultState === "error" ? "alert" : undefined}>
                     {resultState === "loading"
                         ? "Looking at your photo and putting together an answer…"
-                        : resultState === "unavailable"
-                        ? "The AI stylist is not connected yet. Your photo has stayed in this browser."
                         : resultState === "error"
                         ? errorMessage
                         : "Your answer will appear here after you add a photo and ask a question."}
