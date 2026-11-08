@@ -1,39 +1,43 @@
 import { Router } from "express";
-import {WardrobeItem} from "../../client/src/WardrobePage/WardrobeItem"
+import type { WardrobeItem } from "../../client/src/WardrobePage/WardrobeItem";
+import { runSql } from "../databricks";
+
 const router = Router();
 
 
-//hard coding currentUserId as 10 for now
-//return the images for the user.
 router.get("/", async (req, res) => {
-    try {
-    const userId = req.query.user_id;
-    console.log(userId);
+  try {
+    const userId = String(req.query.user_id ?? "");
+    if (!userId) return res.status(400).json({ error: "user_id is required" });
 
-  // TODO: Retrieve wardrobe items from database.
-  const wardrobeItems: WardrobeItem[] = [
-    {
-      image_id: 1,
-      file_name: "GoodShrekImage.png",
-      caption: "Black hoodie",
-      tags: ["black", "hoodie"],
-      uploaded_at: "2026-11-07T15:30:00Z",
-    },
-    {
-      image_id: 2,
-      file_name: "GoodShrekImage.png",
-      caption: "Blue jeans",
-      tags: ["blue", "jeans"],
-      uploaded_at: "2026-11-07T16:00:00Z",
-    },
-  ];
+    const rows = await runSql(
+      `SELECT image_id, file_name, caption, tags, uploaded_at
+       FROM workspace.image_project.images
+       WHERE user_id = :user_id AND status = 'tagged'
+       ORDER BY uploaded_at DESC`,
+      { user_id: userId }
+    );
+
+    const wardrobeItems: WardrobeItem[] = rows.map(
+      ([image_id, file_name, caption, tags, uploaded_at]) => ({
+        image_id: image_id!,
+        file_name: file_name ?? "",
+        caption: caption ?? "",
+        tags: typeof tags === "string" ? (JSON.parse(tags) as string[]) : [],
+        uploaded_at: uploaded_at ?? "",
+      })
+    );
 
     return res.json(wardrobeItems);
+  } catch (error) {
+    console.error("/api/wardrobe failed:", error);
+    return res.status(500).json({ error: "Failed to load wardrobe" });
+  }
+});
 
-    } catch(error)
-    {
-        return res.status(500).json({error: "ooopsies something went wrong in route: /api/wardrobe?user_id=${currentUserId}"})
-    }
+
+router.get("/", async (req, res) => {
+
 });
 
 export default router;
