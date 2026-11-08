@@ -3,8 +3,9 @@ import {WardrobeItem} from "../../client/src/WardrobePage/WardrobeItem"
 const router = Router();
 
 
+//hard coding currentUserId as 10 for now
 //return the images for the user.
-router.get("/api/wardrobe?user_id=${currentUserId}", async (req, res) => {
+router.get("/api/wardrobe?user_id=${10}", async (req, res) => {
     try {
     const userId = req.query.user_id;
     
