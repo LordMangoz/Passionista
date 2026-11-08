@@ -21,17 +21,19 @@ export default function Wardrobe() {
     fetch(`/api/wardrobe?user_id=${currentUserId}`)
       .then((res) => res.json())
       .then(setItems);
-  });
+  }, []);
+
 
   return (
     <div className="wardrobe-grid">
-      {items.map((item) => (
-        <ClothingCard
-          imageUrl={`/api/image/${item.image_id}`}
-          description={item.caption}
-          tags={item.tags}
-        />
-      ))}
+    {items.map((item) => (
+      <ClothingCard
+        key={item.image_id}
+        imageUrl={`/api/image/${item.image_id}`}
+        description={item.caption}
+        tags={item.tags}
+      />
+    ))}
     </div>
   );
 }

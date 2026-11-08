@@ -18,6 +18,7 @@ interface ClothingCardProps {
  * @return clickable div that links to more info about the object.
  */
 export default function ClothingCard( {
+
   imageUrl,
   description,
   tags
@@ -34,12 +35,14 @@ export default function ClothingCard( {
       className={`clothing-card ${isBig ? "expanded" : "small"}`}
       onClick={handleChange}
     >
-      <img src={`${imageUrl}`}> hello :D</img>
+      <img src={imageUrl} alt={description} />
       <a>{description}</a>
       <p> 
       {
         tags.map((tag) => (
-          <span className="tag">${tag}</span> 
+            <span key={tag} className="tag">
+              {tag}
+            </span> 
         ))
       }
     </p>

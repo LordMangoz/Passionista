@@ -5,11 +5,12 @@ const router = Router();
 
 //hard coding currentUserId as 10 for now
 //return the images for the user.
-router.get("/api/wardrobe?user_id=${10}", async (req, res) => {
+router.get("/", async (req, res) => {
     try {
     const userId = req.query.user_id;
-    
-        // TODO: Retrieve wardrobe items from database.
+    console.log(userId);
+
+  // TODO: Retrieve wardrobe items from database.
   const wardrobeItems: WardrobeItem[] = [
     {
       image_id: 1,
@@ -26,6 +27,8 @@ router.get("/api/wardrobe?user_id=${10}", async (req, res) => {
       uploaded_at: "2026-11-07T16:00:00Z",
     },
   ];
+
+    return res.json(wardrobeItems);
 
     } catch(error)
     {
