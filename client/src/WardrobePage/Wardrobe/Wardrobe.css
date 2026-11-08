@@ -1,15 +1,43 @@
+.wardrobe-page {
+	min-height: 100vh;
+}
+
+.wardrobe-header {
+	display: flex;
+	min-height: 76px;
+	align-items: center;
+	padding: 12px 28px;
+	border-bottom: 1px solid #e6ddd6;
+	background: #fff;
+}
+
+.wardrobe-content {
+	padding: 28px;
+}
+
 .wardrobe-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
 	align-items: start;
 	gap: 20px;
-	padding: 28px;
+}
+
+.wardrobe-user-id {
+	margin: 24px 0 0;
 }
 
 @media (max-width: 540px) {
+	.wardrobe-header {
+		min-height: 64px;
+		padding: 10px 16px;
+	}
+
+	.wardrobe-content {
+		padding: 16px;
+	}
+
 	.wardrobe-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 12px;
-		padding: 16px;
 	}
 }

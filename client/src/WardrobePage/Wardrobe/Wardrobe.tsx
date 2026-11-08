@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import ClothingCard from "../ClothingCard/ClothingCard";
 import type { WardrobeItem } from "../WardrobeItem";
 import "./Wardrobe.css";
+import PageMenu from "../../PageMenu";
 /**
  * The Actual Wardrobe Page, generates
  * each item under the user's wardrobe on the database.
@@ -30,16 +31,23 @@ export default function Wardrobe() {
 
 
   return (
-    <div className="wardrobe-grid">
-    {items.map((item) => (
-      <ClothingCard
-        key={item.image_id}
-        imageUrl={`/api/image/${item.image_id}`}
-        description={item.caption}
-        tags={item.tags}
-      />
-    ))}
-    {currentUserId && <p>User ID: {currentUserId}</p>}
+    <div className="wardrobe-page">
+      <header className="wardrobe-header">
+        <PageMenu current="wardrobe" />
+      </header>
+      <main className="wardrobe-content">
+        <section className="wardrobe-grid" aria-label="Your wardrobe">
+          {items.map((item) => (
+            <ClothingCard
+              key={item.image_id}
+              imageUrl={`/api/image/${item.image_id}`}
+              description={item.caption}
+              tags={item.tags}
+            />
+          ))}
+        </section>
+        {currentUserId && <p className="wardrobe-user-id">User ID: {currentUserId}</p>}
+      </main>
     </div>
   );
 }

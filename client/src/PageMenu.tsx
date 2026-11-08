@@ -1,7 +1,7 @@
 import "./PageMenu.css";
 
 type PageMenuProps = {
-  current: "home" | "stylist" ;
+  current: "home" | "wardrobe" | "stylist" ;
 };
 
 export default function PageMenu({ current }: PageMenuProps) {
@@ -14,7 +14,11 @@ export default function PageMenu({ current }: PageMenuProps) {
         ) : (
           <a href="/">Home</a>
         )}
-        <span className="page-menu-disabled" aria-disabled="true">Wardrobe <small>Coming soon</small></span>
+        {current === "wardrobe" ? (
+          <span className="page-menu-current" aria-current="page">Wardrobe <small>Current page</small></span>
+        ) : (
+          <a href="/wardrobe">Wardrobe</a>
+        )}
         {current === "stylist" ? (
           <span className="page-menu-current" aria-current="page">Stylist <small>Current page</small></span>
         ) : (
