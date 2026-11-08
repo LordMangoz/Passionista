@@ -9,9 +9,53 @@
   transition: box-shadow 220ms ease, transform 220ms ease;
 }
 
-.clothing-card:hover,
-.clothing-card:focus-visible {
+.clothing-card-delete,
+.clothing-card-delete-check {
+  position: absolute;
   z-index: 1;
+  top: 10px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(40 32 39 / 88%);
+  color: #fff;
+}
+
+.clothing-card-delete {
+  right: 10px;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.clothing-card-delete:hover:not(:disabled) {
+  background: #79565a;
+}
+
+.clothing-card-delete:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.clothing-card-delete-check {
+  left: 10px;
+  border: 2px solid #fff;
+  font-size: 17px;
+}
+
+.clothing-card.is-delete-select-mode {
+  cursor: pointer;
+  user-select: none;
+}
+
+.clothing-card.is-delete-selected {
+  outline: 3px solid #79565a;
+  outline-offset: 2px;
+}
+
+.clothing-card:hover {
   box-shadow: 0 12px 28px rgb(34 28 34 / 18%);
   transform: translateY(-4px);
 }
@@ -25,47 +69,143 @@
 }
 
 .clothing-card-details {
-  max-height: 0;
-  overflow: hidden;
-  padding: 0 16px;
-  opacity: 0;
-  transition: max-height 260ms ease, opacity 180ms ease, padding 260ms ease;
+  padding: 16px;
 }
 
-.clothing-card:hover .clothing-card-details,
-.clothing-card:focus-visible .clothing-card-details {
-  max-height: 180px;
-  padding: 15px 16px 17px;
-  opacity: 1;
+.clothing-card-select {
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  border: 1px solid #cbbfba;
+  border-radius: 2px;
+  background: #fff;
+  color: #79565a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clothing-card-select:hover,
+.clothing-card-select.is-selected {
+  border-color: #79565a;
+  background: #f3e8e4;
 }
 
 .clothing-card-details h2 {
-  margin: 0 0 11px;
+  margin: 0 0 8px;
   color: #282027;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 400;
   line-height: 1.25;
 }
 
+.clothing-card-meta {
+  margin: 0 0 12px;
+  color: #686868;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.clothing-card-tag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .clothing-card-tags {
   display: flex;
+  min-width: 0;
+  flex: 1;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
 }
 
 .tag {
-  padding: 4px 8px;
+  border: 0;
   border-radius: 2px;
   background: #f3e8e4;
   color: #79565a;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
+.tag-delete {
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.tag-delete span {
+  margin-left: 4px;
+  font-size: 14px;
+}
+
+.tag-delete:hover:not(:disabled) {
+  background: #e8d1cc;
+}
+
+.tag-add-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 1px solid #cbbfba;
+  border-radius: 50%;
+  background: #fff;
+  color: #79565a;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tag-add-button:hover:not(:disabled) {
+  border-color: #79565a;
+  background: #f3e8e4;
+}
+
+.tag-add-form {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.tag-add-form input {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 9px;
+  border: 1px solid #cbbfba;
+  border-radius: 2px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.tag-add-form button {
+  padding: 0 11px;
+  border: 0;
+  border-radius: 2px;
+  background: #282027;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tag-add-form button:hover:not(:disabled) {
+  background: #79565a;
+}
+
+.tag-error {
+  margin: 9px 0 0;
+  color: #9a3e45;
+  font-size: 12px;
+}
+
+.tag-delete:disabled,
+.tag-add-button:disabled,
+.tag-add-form button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .clothing-card,
-  .clothing-card-details {
+  .clothing-card {
     transition: none;
   }
 }

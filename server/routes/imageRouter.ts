@@ -20,6 +20,7 @@ const GEMINI_KEY = () => env("GEMINI_API_KEY");
 
 const IMAGES_TABLE = "workspace.image_project.images";
 const ITEMS_TABLE = "workspace.image_project.clothing_items";
+const OUTFITS_TABLE = "workspace.image_project.outfits";
 const VOLUME_IMAGES_ROOT = "/Volumes/workspace/image_project/image_files/images";
 
 // Gemini: primary + fallback (flash models get transient 503 congestion — retry then fall back)
@@ -91,6 +92,28 @@ async function runStatement(statement: string, params: Param[] = []): Promise<(s
   return st?.result?.data_array ?? [];
 }
 
+let outfitsTablePromise: Promise<void> | null = null;
+
+/** Create the outfits table on first use so existing workspaces need no manual migration. */
+async function ensureOutfitsTable(): Promise<void> {
+  if (!outfitsTablePromise) {
+    outfitsTablePromise = runStatement(`
+      CREATE TABLE IF NOT EXISTS ${OUTFITS_TABLE} (
+        outfit_id STRING,
+        user_id STRING,
+        name STRING,
+        source_image_id STRING,
+        clothing_item_ids ARRAY<STRING>,
+        created_at TIMESTAMP
+      ) USING DELTA
+    `).then(() => undefined).catch((error: unknown) => {
+      outfitsTablePromise = null;
+      throw error;
+    });
+  }
+  await outfitsTablePromise;
+}
+
 // ---------- Databricks: volume file I/O (workspace Files API) ----------
 
 
@@ -124,39 +147,21 @@ INSERT INTO ${IMAGES_TABLE}
 VALUES (:image_id, :user_id, :file_name, :file_path, :mime_type, :size_bytes, NULL, NULL, 'uploaded', current_timestamp(), NULL)`;
 
 const ITEMS_INGEST = `
-INSERT INTO ${ITEMS_TABLE} (
-    clothing_item_id,
-    image_id,
-    user_id,
-    category,
-    subcategory,
-    primary_color,
-    secondary_colors,
-    pattern,
-    material,
-    fit,
-    style_tags,
-    formality,
-    season,
-    created_at
-)
-SELECT
-    uuid(),
-    :image_id,
-    :user_id,
-    it.category,
-    it.subcategory,
-    it.primary_color,
-    it.secondary_colors,
-    it.pattern,
-    it.material,
-    it.fit,
-    it.style_tags,
-    it.formality,
-    it.season,
-    current_timestamp()
-FROM (
-    SELECT explode(from_json(:items_json,
+MERGE INTO ${ITEMS_TABLE} AS target
+USING (
+    SELECT
+        sha2(concat(:image_id, ':', cast(pos AS STRING)), 256) AS clothing_item_id,
+        it.category,
+        it.subcategory,
+        it.primary_color,
+        it.secondary_colors,
+        it.pattern,
+        it.material,
+        it.fit,
+        it.style_tags,
+        it.formality,
+        it.season
+    FROM posexplode(from_json(:items_json,
         'array<struct<
             category:string,
             subcategory:string,
@@ -169,8 +174,32 @@ FROM (
             formality:string,
             season:array<string>
         >>'
-    )) AS it
-)`;
+    )) AS (pos, it)
+) AS source
+ON target.clothing_item_id = source.clothing_item_id
+WHEN MATCHED THEN UPDATE SET
+    target.category = source.category,
+    target.subcategory = source.subcategory,
+    target.primary_color = source.primary_color,
+    target.secondary_colors = source.secondary_colors,
+    target.pattern = source.pattern,
+    target.material = source.material,
+    target.fit = source.fit,
+    target.style_tags = source.style_tags,
+    target.formality = source.formality,
+    target.season = source.season
+WHEN NOT MATCHED THEN INSERT (
+    clothing_item_id, image_id, user_id, category, subcategory, primary_color,
+    secondary_colors, pattern, material, fit, style_tags, formality, season, created_at
+) VALUES (
+    source.clothing_item_id, :image_id, :user_id, source.category, source.subcategory,
+    source.primary_color, source.secondary_colors, source.pattern, source.material,
+    source.fit, source.style_tags, source.formality, source.season, current_timestamp()
+)
+WHEN NOT MATCHED BY SOURCE
+    AND target.image_id = :image_id
+    AND target.user_id = :user_id
+THEN DELETE`;
 
 const IMAGE_TAGGED = `
 UPDATE ${IMAGES_TABLE}
@@ -394,7 +423,8 @@ imageRouter.post("/images", upload.single("image"), async (req: Request, res: Re
 async function answerStylistQuestion(
   base64: string,
   mime: string,
-  prompt: string
+  prompt: string,
+  structured = false
 ): Promise<string> {
   let lastErr: unknown;
 
@@ -415,9 +445,9 @@ async function answerStylistQuestion(
                   ]
                 }
               ],
-              generationConfig: {
-                temperature: 0.4
-              }
+              generationConfig: structured
+                ? { responseMimeType: "application/json", temperature: 0.4 }
+                : { temperature: 0.4 }
             }),
             signal: AbortSignal.timeout(30_000)
           }
@@ -470,7 +500,7 @@ imageRouter.post("/images/:id/ask", async (req: Request, res: Response, next: Ne
 
       "my-style": "Evaluate whether the clothing in this image fits the user's personal style. Use their existing wardrobe as context. Explain why it does or does not fit.",
 
-      "wardrobe-match": "Identify which items from the user's wardrobe would match the clothing in this image. Explain why each combination works.",
+      "wardrobe-match": "Choose the best matching items from the user's wardrobe for an outfit with the clothing in this image. Explain briefly why the combination works.",
 
       "outfit-ideas": "Suggest several outfits incorporating the clothing shown in this image. Explain how to style the item, including suitable colors, clothing, and accessories."
     };
@@ -503,8 +533,63 @@ imageRouter.post("/images/:id/ask", async (req: Request, res: Response, next: Ne
 
     // Retrieve wardrobe context for questions that need personal style information.
     let wardrobeContext = "";
+    let wardrobeItems: {
+      clothing_item_id: string;
+      image_id: string;
+      category: string;
+      subcategory: string;
+      primary_color: string;
+      style_tags: string;
+    }[] = [];
 
-    if (questionID === "my-style" || questionID === "wardrobe-match" ||   questionID === "outfit-ideas") {
+    if (questionID === "wardrobe-match") {
+      const wardrobeRows = await runStatement(
+        `SELECT item.clothing_item_id, item.image_id, item.category, item.subcategory,
+                item.primary_color, item.style_tags
+         FROM ${ITEMS_TABLE} AS item
+         INNER JOIN ${IMAGES_TABLE} AS source
+           ON item.image_id = source.image_id AND item.user_id = source.user_id
+         WHERE item.user_id = :user_id
+           AND item.image_id <> :image_id
+           AND source.status = 'tagged'
+         ORDER BY item.created_at DESC
+         LIMIT 100`,
+        [
+          { name: "user_id", value: user_id },
+          { name: "image_id", value: image_id },
+        ]
+      );
+
+      wardrobeItems = wardrobeRows.map((row) => ({
+        clothing_item_id: String(row[0]),
+        image_id: String(row[1]),
+        category: String(row[2] ?? ""),
+        subcategory: String(row[3] ?? ""),
+        primary_color: String(row[4] ?? ""),
+        style_tags: String(row[5] ?? ""),
+      }));
+
+      if (wardrobeItems.length === 0) {
+        res.json({
+          answer: "Your wardrobe does not have any other tagged items to compare yet.",
+          matches: [],
+        });
+        return;
+      }
+
+      wardrobeContext = `
+        Select matches only from this user's wardrobe catalog. Never invent an item or ID.
+        Choose up to 6 pieces that make a cohesive outfit with the uploaded item.
+        Return pieces in visual top-to-bottom order: tops or dresses, outerwear, bottoms,
+        socks, shoes, then other accessories. In particular, put socks before shoes.
+        Wardrobe catalog:
+        ${JSON.stringify(wardrobeItems)}
+
+        Return only JSON in this exact shape:
+        {"answer":"brief outfit advice","matches":[{"clothing_item_id":"exact catalog ID","reason":"brief reason"}]}
+        Use an empty matches array when no catalog pieces work.
+      `;
+    } else if (questionID === "my-style" || questionID === "outfit-ideas") {
       const wardrobeRows = await runStatement(
         `SELECT category, subcategory, primary_color, style_tags, formality, season
          FROM ${ITEMS_TABLE}
@@ -535,8 +620,57 @@ imageRouter.post("/images/:id/ask", async (req: Request, res: Response, next: Ne
     const answer = await answerStylistQuestion(
       base64,
       mime,
-      `${prompt}\n\n${wardrobeContext}`
+      `${prompt}\n\n${wardrobeContext}`,
+      questionID === "wardrobe-match"
     );
+
+    if (questionID === "wardrobe-match") {
+      let recommendation: unknown;
+      try {
+        recommendation = JSON.parse(answer);
+      } catch {
+        throw new HttpError(502, "The stylist returned an invalid outfit recommendation. Please try again.");
+      }
+
+      if (
+        !recommendation ||
+        typeof recommendation !== "object" ||
+        !("answer" in recommendation) ||
+        typeof recommendation.answer !== "string" ||
+        !("matches" in recommendation) ||
+        !Array.isArray(recommendation.matches)
+      ) {
+        throw new HttpError(502, "The stylist returned an invalid outfit recommendation. Please try again.");
+      }
+
+      const wardrobeById = new Map(wardrobeItems.map((item) => [item.clothing_item_id, item]));
+      const seen = new Set<string>();
+      const matches = recommendation.matches.flatMap((entry) => {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          !("clothing_item_id" in entry) ||
+          typeof entry.clothing_item_id !== "string" ||
+          seen.has(entry.clothing_item_id)
+        ) return [];
+
+        const item = wardrobeById.get(entry.clothing_item_id);
+        if (!item) return [];
+        seen.add(item.clothing_item_id);
+        const name = [item.subcategory || item.category, item.primary_color]
+          .filter(Boolean)
+          .join(" · ");
+
+        return [{
+          ...item,
+          name: name || "Wardrobe item",
+          reason: "reason" in entry && typeof entry.reason === "string" ? entry.reason : "",
+        }];
+      }).slice(0, 6);
+
+      res.json({ answer: recommendation.answer, matches });
+      return;
+    }
 
     res.json({ answer });
   } catch (error) {
@@ -636,6 +770,133 @@ imageRouter.get("/wardrobe", async (req: Request, res: Response, next: NextFunct
   }
 });
 
+/** DELETE /api/wardrobe — delete selected clothing rows and clean saved outfit references. */
+imageRouter.delete("/wardrobe", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const body = req.body as { item_ids?: unknown };
+    if (
+      !Array.isArray(body?.item_ids) ||
+      body.item_ids.length === 0 ||
+      body.item_ids.length > 100 ||
+      !body.item_ids.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128)
+    ) {
+      throw new HttpError(400, "Provide between 1 and 100 valid clothing item IDs");
+    }
+
+    const itemIds = [...new Set(body.item_ids as string[])];
+    if (itemIds.length !== body.item_ids.length) {
+      throw new HttpError(400, "Clothing item IDs must be unique");
+    }
+
+    const itemIdsJson = JSON.stringify(itemIds);
+    const ownedItems = await runStatement(
+      `SELECT COUNT(DISTINCT clothing_item_id)
+       FROM ${ITEMS_TABLE}
+       WHERE user_id = :user_id
+         AND array_contains(from_json(:item_ids_json, 'array<string>'), clothing_item_id)`,
+      [
+        { name: "user_id", value: user_id },
+        { name: "item_ids_json", value: itemIdsJson },
+      ]
+    );
+    if (Number(ownedItems[0]?.[0] ?? 0) !== itemIds.length) {
+      throw new HttpError(404, "One or more clothing items were not found");
+    }
+
+    await runStatement(
+      `DELETE FROM ${ITEMS_TABLE}
+       WHERE user_id = :user_id
+         AND array_contains(from_json(:item_ids_json, 'array<string>'), clothing_item_id)`,
+      [
+        { name: "user_id", value: user_id },
+        { name: "item_ids_json", value: itemIdsJson },
+      ]
+    );
+
+    await ensureOutfitsTable();
+    await runStatement(
+      `UPDATE ${OUTFITS_TABLE}
+       SET clothing_item_ids = array_except(
+         COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>)),
+         from_json(:item_ids_json, 'array<string>')
+       )
+       WHERE user_id = :user_id
+         AND array_size(clothing_item_ids) > 0
+         AND array_size(array_intersect(
+           clothing_item_ids,
+           from_json(:item_ids_json, 'array<string>')
+         )) > 0`,
+      [
+        { name: "user_id", value: user_id },
+        { name: "item_ids_json", value: itemIdsJson },
+      ]
+    );
+    await runStatement(
+      `DELETE FROM ${OUTFITS_TABLE}
+       WHERE user_id = :user_id
+         AND source_image_id IS NULL
+         AND array_size(COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>))) = 0`,
+      [{ name: "user_id", value: user_id }]
+    );
+
+    res.json({ deleted_item_ids: itemIds });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** PATCH /api/wardrobe/:itemId/tags — add or remove a style tag on an owned item. */
+imageRouter.patch("/wardrobe/:itemId/tags", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const item_id = req.params.itemId;
+    if (typeof item_id !== "string") throw new HttpError(400, "Invalid clothing item ID");
+
+    const { action, tag: rawTag } = req.body as { action?: unknown; tag?: unknown };
+    if (action !== "add" && action !== "remove") {
+      throw new HttpError(400, "Tag action must be 'add' or 'remove'");
+    }
+    if (typeof rawTag !== "string") throw new HttpError(400, "A tag is required");
+
+    const tag = rawTag.trim();
+    if (!tag || tag.length > 40) {
+      throw new HttpError(400, "Tags must be between 1 and 40 characters");
+    }
+
+    const tagUpdate = action === "add"
+      ? `array_union(COALESCE(style_tags, CAST(ARRAY() AS ARRAY<STRING>)), ARRAY(:tag))`
+      : `array_except(COALESCE(style_tags, CAST(ARRAY() AS ARRAY<STRING>)), ARRAY(:tag))`;
+
+    await runStatement(
+      `UPDATE ${ITEMS_TABLE}
+       SET style_tags = ${tagUpdate}
+       WHERE clothing_item_id = :item_id AND user_id = :user_id`,
+      [
+        { name: "tag", value: tag },
+        { name: "item_id", value: item_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+
+    const rows = await runStatement(
+      `SELECT style_tags FROM ${ITEMS_TABLE}
+       WHERE clothing_item_id = :item_id AND user_id = :user_id`,
+      [
+        { name: "item_id", value: item_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+    if (!rows.length) throw new HttpError(404, "Clothing item not found");
+
+    res.json({
+      style_tags: rows[0][0] ? JSON.parse(String(rows[0][0])) as string[] : [],
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 /** POST /api/images/:id/retry — re-run background tagging for a failed image. */
 imageRouter.post("/images/:id/retry", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -659,6 +920,137 @@ imageRouter.post("/images/:id/retry", async (req: Request, res: Response, next: 
     void tagImageInBackground(user_id, image_id, bytes.toString("base64"), String(rows[0][1]));
 
     res.status(202).json({ image_id, status: "retrying" });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** GET /api/outfits — list this user's saved outfits. */
+imageRouter.get("/outfits", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    await ensureOutfitsTable();
+    const rows = await runStatement(
+      `SELECT outfit_id, name, source_image_id, to_json(clothing_item_ids), created_at
+       FROM ${OUTFITS_TABLE}
+       WHERE user_id = :user_id
+       ORDER BY created_at DESC`,
+      [{ name: "user_id", value: user_id }]
+    );
+
+    res.json(rows.map((row) => {
+      const itemIds = row[3] ? JSON.parse(String(row[3])) as unknown : [];
+      if (!Array.isArray(itemIds) || !itemIds.every((id) => typeof id === "string")) {
+        throw new Error("Databricks returned an invalid outfit item list.");
+      }
+      return {
+        outfit_id: String(row[0]),
+        name: String(row[1] ?? "Saved outfit"),
+        source_image_id: row[2] ? String(row[2]) : null,
+        clothing_item_ids: itemIds,
+        created_at: String(row[4] ?? ""),
+      };
+    }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** POST /api/outfits — save an outfit made from this user's clothing items and/or source image. */
+imageRouter.post("/outfits", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const body = req.body as {
+      name?: unknown;
+      source_image_id?: unknown;
+      clothing_item_ids?: unknown;
+    };
+    if (body?.name !== undefined && typeof body.name !== "string") {
+      throw new HttpError(400, "Outfit name must be text");
+    }
+    if (body?.source_image_id !== undefined && typeof body.source_image_id !== "string") {
+      throw new HttpError(400, "Invalid source image ID");
+    }
+    const itemIds = Array.isArray(body?.clothing_item_ids)
+      ? [...new Set(body.clothing_item_ids.filter(
+          (id): id is string => typeof id === "string" && id.length > 0 && id.length <= 128
+        ))]
+      : [];
+    if (
+      !Array.isArray(body?.clothing_item_ids) ||
+      itemIds.length !== body.clothing_item_ids.length ||
+      itemIds.length > 20
+    ) {
+      throw new HttpError(400, "Choose up to 20 valid wardrobe items");
+    }
+
+    const source_image_id = typeof body.source_image_id === "string"
+      ? body.source_image_id.trim()
+      : "";
+    if (source_image_id.length > 128) {
+      throw new HttpError(400, "Invalid source image ID");
+    }
+    if (itemIds.length === 0 && !source_image_id) {
+      throw new HttpError(400, "An outfit must include at least one item or image");
+    }
+
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (name.length > 80) throw new HttpError(400, "Outfit names must be 80 characters or fewer");
+    const outfit_name = name || "My outfit";
+
+    await ensureOutfitsTable();
+
+    if (itemIds.length > 0) {
+      const ownedItems = await runStatement(
+        `SELECT COUNT(DISTINCT clothing_item_id)
+         FROM ${ITEMS_TABLE}
+         WHERE user_id = :user_id
+           AND array_contains(from_json(:item_ids_json, 'array<string>'), clothing_item_id)`,
+        [
+          { name: "user_id", value: user_id },
+          { name: "item_ids_json", value: JSON.stringify(itemIds) },
+        ]
+      );
+      if (Number(ownedItems[0]?.[0] ?? 0) !== itemIds.length) {
+        throw new HttpError(400, "One or more selected items are not in your wardrobe");
+      }
+    }
+
+    if (source_image_id) {
+      const ownedImage = await runStatement(
+        `SELECT image_id FROM ${IMAGES_TABLE}
+         WHERE image_id = :image_id AND user_id = :user_id`,
+        [
+          { name: "image_id", value: source_image_id },
+          { name: "user_id", value: user_id },
+        ]
+      );
+      if (!ownedImage.length) throw new HttpError(400, "The outfit image is not in your uploads");
+    }
+
+    const outfit_id = crypto.randomUUID();
+    await runStatement(
+      `INSERT INTO ${OUTFITS_TABLE}
+         (outfit_id, user_id, name, source_image_id, clothing_item_ids, created_at)
+       VALUES (
+         :outfit_id, :user_id, :name, NULLIF(:source_image_id, ''),
+         from_json(:item_ids_json, 'array<string>'), current_timestamp()
+       )`,
+      [
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+        { name: "name", value: outfit_name },
+        { name: "source_image_id", value: source_image_id },
+        { name: "item_ids_json", value: JSON.stringify(itemIds) },
+      ]
+    );
+
+    res.status(201).json({
+      outfit_id,
+      name: outfit_name,
+      source_image_id: source_image_id || null,
+      clothing_item_ids: itemIds,
+    });
   } catch (e) {
     next(e);
   }

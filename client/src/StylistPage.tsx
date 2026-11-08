@@ -28,9 +28,20 @@ const questions = [
 ] as const;
 
 type QuestionId = (typeof questions)[number]["id"];
+type StylistMatch = {
+  clothing_item_id: string;
+  image_id: string;
+  category: string;
+  subcategory: string;
+  primary_color: string;
+  style_tags: string;
+  name: string;
+  reason: string;
+  imageUrl: string;
+};
 type StylistResult = {
   answer: string;
-  matches?: { name: string; reason?: string }[];
+  matches?: StylistMatch[];
 };
 type ResultState = "idle" | "loading" | "ready" | "unavailable" | "error";
 
@@ -54,27 +65,42 @@ export default function StylistPage() {
   const [result, setResult] = useState<StylistResult | null>(null);
   const [resultState, setResultState] = useState<ResultState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSavingOutfit, setIsSavingOutfit] = useState(false);
+  const [outfitSaveMessage, setOutfitSaveMessage] = useState("");
+  const [outfitSaveError, setOutfitSaveError] = useState("");
   const previewUrlRef = useRef<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const matchImageUrlsRef = useRef(new Set<string>());
 
   useEffect(() => {
     const previousTitle = document.title;
+    const matchImageUrls = matchImageUrlsRef.current;
     document.title = "Stylist Studio | Passionista";
     return () => {
       document.title = previousTitle;
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      for (const url of matchImageUrls) URL.revokeObjectURL(url);
+      matchImageUrls.clear();
       requestRef.current?.abort();
     };
   }, []);
 
   const selectedQuestion = questions.find((question) => question.id === selectedQuestionId)!;
 
+  function clearMatchImages() {
+    for (const url of matchImageUrlsRef.current) URL.revokeObjectURL(url);
+    matchImageUrlsRef.current.clear();
+  }
+
   function clearAnalysis() {
     requestRef.current?.abort();
+    clearMatchImages();
     setResult(null);
     setResultState("idle");
     setErrorMessage("");
+    setOutfitSaveMessage("");
+    setOutfitSaveError("");
   }
 
   function chooseFile(nextFile?: File) {
@@ -196,16 +222,65 @@ async function askStylist() {
       throw new Error("The stylist returned an unexpected response.");
     }
 
-    const matches = "matches" in data && Array.isArray(data.matches)
-      ? data.matches.filter(
-          (match): match is { name: string; reason?: string } =>
-            match !== null &&
-            typeof match === "object" &&
-            "name" in match &&
-            typeof match.name === "string" &&
-            (!("reason" in match) || typeof match.reason === "string"),
-        )
-      : undefined;
+    let matches: StylistMatch[] | undefined;
+    if (selectedQuestion.id === "wardrobe-match") {
+      if (!("matches" in data) || !Array.isArray(data.matches)) {
+        throw new Error("The stylist returned an unexpected outfit recommendation.");
+      }
+
+      const suggestions = data.matches.filter(
+        (match): match is Omit<StylistMatch, "imageUrl"> =>
+          match !== null &&
+          typeof match === "object" &&
+          "clothing_item_id" in match &&
+          typeof match.clothing_item_id === "string" &&
+          "image_id" in match &&
+          typeof match.image_id === "string" &&
+          "category" in match &&
+          typeof match.category === "string" &&
+          "subcategory" in match &&
+          typeof match.subcategory === "string" &&
+          "primary_color" in match &&
+          typeof match.primary_color === "string" &&
+          "style_tags" in match &&
+          typeof match.style_tags === "string" &&
+          "name" in match &&
+          typeof match.name === "string" &&
+          "reason" in match &&
+          typeof match.reason === "string",
+      );
+
+      const imageResults = await Promise.allSettled(suggestions.map(async (match) => {
+        const imageResponse = await fetch(
+          `/api/images/${encodeURIComponent(match.image_id)}/file`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: controller.signal,
+          },
+        );
+        if (!imageResponse.ok) {
+          throw new Error(await getApiError(imageResponse, "Could not load a wardrobe match"));
+        }
+        const imageUrl = URL.createObjectURL(await imageResponse.blob());
+        matchImageUrlsRef.current.add(imageUrl);
+        return { ...match, imageUrl };
+      }));
+
+      if (controller.signal.aborted) {
+        clearMatchImages();
+        return;
+      }
+
+      const failedImage = imageResults.find((entry) => entry.status === "rejected");
+      if (failedImage?.status === "rejected") {
+        clearMatchImages();
+        throw failedImage.reason;
+      }
+
+      matches = imageResults.flatMap((entry) =>
+        entry.status === "fulfilled" ? [entry.value] : [],
+      ).sort((a, b) => outfitOrder(a) - outfitOrder(b));
+    }
 
     setResult({ answer: data.answer, matches });
     setResultState("ready");
@@ -223,6 +298,52 @@ async function askStylist() {
     if (requestRef.current === controller) {
       requestRef.current = null;
     }
+  }
+}
+
+function outfitOrder(match: Pick<StylistMatch, "category" | "subcategory">): number {
+  const subcategory = match.subcategory.toLowerCase();
+  const category = match.category.toLowerCase();
+  if (subcategory.includes("sock")) return 3;
+  if (/\b(shoe|sneaker|boot|sandal)\b/.test(subcategory)) return 4;
+  if (category === "top" || category === "dress") return 0;
+  if (category === "outerwear") return 1;
+  if (category === "bottom") return 2;
+  if (category === "footwear") return 4;
+  if (category === "accessory") return 5;
+  return 6;
+}
+
+async function saveStylistOutfit() {
+  if (!imageId || !result?.matches?.length || isSavingOutfit) return;
+  setIsSavingOutfit(true);
+  setOutfitSaveMessage("");
+  setOutfitSaveError("");
+  try {
+    if (!auth0Audience) throw new Error("Auth0 API audience is not configured.");
+    const accessToken = await getAccessTokenSilently({
+      authorizationParams: { audience: auth0Audience },
+    });
+    if (!accessToken) throw new Error("Auth0 did not return an access token.");
+
+    const response = await fetch("/api/outfits", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: `Outfit with ${file?.name.replace(/\.[^.]+$/, "") || "your piece"}`.slice(0, 80),
+        source_image_id: imageId,
+        clothing_item_ids: result.matches.map((match) => match.clothing_item_id),
+      }),
+    });
+    if (!response.ok) throw new Error(await getApiError(response, "Could not save outfit"));
+    setOutfitSaveMessage("Outfit saved to your wardrobe.");
+  } catch (error) {
+    setOutfitSaveError(error instanceof Error ? error.message : "Could not save outfit.");
+  } finally {
+    setIsSavingOutfit(false);
   }
 }
 
@@ -337,6 +458,44 @@ async function getApiError(response: Response, fallback: string): Promise<string
                 {errorMessage && resultState === "idle" && (
                 <p className="upload-error" role="alert">{errorMessage}</p>
                 )}
+
+                {previewUrl && selectedQuestionId === "wardrobe-match" && resultState === "ready" && result && (
+                  <section className="outfit-suggestions" aria-label="Visual outfit suggestions">
+                    <h3>Outfit pairings</h3>
+                    <p>Styled from top to bottom</p>
+                    {result.matches?.length ? (
+                      <ol>
+                        {result.matches.map((match) => (
+                          <li key={match.clothing_item_id}>
+                            <img src={match.imageUrl} alt={match.name} />
+                            <div>
+                              <span>{match.category}</span>
+                              <strong>{match.name}</strong>
+                              {match.reason && <p>{match.reason}</p>}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p>No matching items from your wardrobe were found for this outfit.</p>
+                    )}
+                    {result.matches?.length ? (
+                      <>
+                        <button
+                          className="save-outfit-button"
+                          type="button"
+                          onClick={() => void saveStylistOutfit()}
+                          disabled={isSavingOutfit || Boolean(outfitSaveMessage)}
+                        >
+                          {isSavingOutfit ? "Saving outfit…" : outfitSaveMessage ? "Saved to wardrobe" : "Save this outfit"}
+                          <span aria-hidden="true">→</span>
+                        </button>
+                        {outfitSaveError && <p className="outfit-save-error" role="alert">{outfitSaveError}</p>}
+                        {outfitSaveMessage && <p className="outfit-save-success" role="status">{outfitSaveMessage}</p>}
+                      </>
+                    ) : null}
+                  </section>
+                )}
             </section>
     
             <section className="stylist-panel questions-panel" aria-labelledby="questions-title">
@@ -409,19 +568,6 @@ async function getApiError(response: Response, fallback: string): Promise<string
                     <h3>{selectedQuestion.title}</h3>
                     <p>{result.answer}</p>
     
-                    {result.matches && result.matches.length > 0 && (
-                        <div className="wardrobe-matches">
-                        <h4>From your wardrobe</h4>
-                        <ul>
-                            {result.matches.map((match, index) => (
-                            <li key={`${match.name}-${index}`}>
-                                <strong>{match.name}</strong>
-                                {match.reason && <span>{match.reason}</span>}
-                            </li>
-                            ))}
-                        </ul>
-                        </div>
-                    )}
                     </>
                 ) : (
                     <p role={resultState === "error" ? "alert" : undefined}>

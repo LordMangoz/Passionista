@@ -448,38 +448,123 @@
   white-space: pre-wrap;
 }
 
-.wardrobe-matches {
-  margin-top: 19px;
-  padding-top: 15px;
-  border-top: 1px solid var(--stylist-line);
+.outfit-suggestions {
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--stylist-line);
+  background: var(--stylist-surface);
 }
 
-.wardrobe-matches h4 {
-  margin: 0 0 10px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.outfit-suggestions h3 {
+  margin: 0 0 5px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 23px;
+  font-weight: 400;
 }
 
-.wardrobe-matches ul {
+.outfit-suggestions > p {
+  margin: 0 0 16px;
+  color: var(--stylist-muted);
+  font-size: 12px;
+}
+
+.outfit-suggestions ol {
   display: grid;
   gap: 10px;
   margin: 0;
   padding: 0;
+  counter-reset: outfit-step;
   list-style: none;
 }
 
-.wardrobe-matches li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  color: var(--stylist-muted);
+.outfit-suggestions li {
+  display: grid;
+  grid-template-columns: 22px 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  counter-increment: outfit-step;
+}
+
+.outfit-suggestions li::before {
+  color: var(--stylist-accent);
+  content: counter(outfit-step, decimal-leading-zero);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.outfit-suggestions li img {
+  width: 82px;
+  height: 92px;
+  background: var(--stylist-soft);
+  object-fit: contain;
+}
+
+.outfit-suggestions li div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.outfit-suggestions li span {
+  color: var(--stylist-accent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.outfit-suggestions li strong {
   font-size: 12px;
+}
+
+.outfit-suggestions li div p {
+  margin: 0;
+  color: var(--stylist-muted);
+  font-size: 11px;
   line-height: 1.45;
 }
 
-.wardrobe-matches strong {
-  color: var(--stylist-ink);
+.save-outfit-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 0;
+  background: var(--stylist-ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.save-outfit-button:hover:not(:disabled) {
+  background: var(--stylist-accent);
+}
+
+.save-outfit-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.save-outfit-button span {
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.outfit-save-error,
+.outfit-save-success {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+.outfit-save-error {
+  color: #9a3e45;
+}
+
+.outfit-save-success {
+  color: #47684e;
 }
 
 .stylist-footer {
@@ -541,6 +626,20 @@
 
   .stylist-panel {
     padding: 22px;
+  }
+
+  .outfit-suggestions {
+    padding: 16px;
+  }
+
+  .outfit-suggestions li {
+    grid-template-columns: 20px 68px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .outfit-suggestions li img {
+    width: 68px;
+    height: 78px;
   }
 
   .question-grid {

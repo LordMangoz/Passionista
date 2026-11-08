@@ -12,15 +12,19 @@ const hasAuth0Config = Boolean(
 export default function App() {
   const path = window.location.pathname.replace(/\/$/, "");
 
+  if (!hasAuth0Config) {
+    return <SetupNotice />;
+  }
+
   if (path === "/stylist") {
     return <StylistPage />;
   }
 
   if (path === "/wardrobe") {
-    return hasAuth0Config ? <Wardrobe /> : <SetupNotice />;
+    return <Wardrobe />;
   }
 
-  return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
+  return <AuthExperience />;
 }
 
 function AuthExperience() {

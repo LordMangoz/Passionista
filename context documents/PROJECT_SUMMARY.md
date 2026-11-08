@@ -17,6 +17,9 @@ Passionista is a fashion and wardrobe web app. Its current experience combines a
 - When Auth0 is configured, authenticated users are shown the wardrobe page; otherwise, the app displays a setup-oriented landing page.
 - The wardrobe page authenticates API requests with an Auth0 access token and displays tagged clothing items from `workspace.image_project.clothing_items`, including their source images.
 - Wardrobe uploads go to Databricks through the Express image route. Gemini tagging runs in the background; the page waits for tagging before refreshing the garment list.
+- Wardrobe cards let users add or remove style tags, saving changes to Databricks, and a category dropdown filters the visible garments.
+- Users can select wardrobe items to save a custom outfit, save a Gemini wardrobe-match recommendation from the Stylist page, and switch the wardrobe to an outfits-only view.
+- Each clothing card has an owner-scoped delete action. Pressing and holding a card enters multi-select deletion mode; deleting a garment also removes its references from saved outfits without deleting a shared source photo.
 - Account data is scoped to the verified Auth0 `sub`. Different Auth0 connections have separate `sub` values and therefore separate wardrobes.
 - Photos previously saved in this browser remain in local storage but are no longer displayed in the wardrobe.
 - The `/stylist` page provides photo upload and drag-and-drop, four selectable styling questions, and a response panel.
@@ -26,6 +29,8 @@ Passionista is a fashion and wardrobe web app. Its current experience combines a
 
 - `GET /api/wardrobe` returns the signed-in user's tagged garment rows and is protected by Auth0 JWT validation.
 - `POST /api/images` uploads a photo, stores its metadata, and starts background Gemini tagging. `GET /api/images/:id/file` serves an image only to its owner.
+- `GET /api/outfits` and `POST /api/outfits` list and save outfits scoped to the verified Auth0 user. The outfits Delta table is created on first use; outfit members are validated against that user's wardrobe and source images.
+- `DELETE /api/wardrobe` deletes one or more clothing-item records belonging to the authenticated user and cleans saved outfit references.
 - The Databricks tables are `workspace.image_project.images` and `workspace.image_project.clothing_items`; image bytes are stored in the `image_files` volume.
 - The server requires Databricks credentials, `GEMINI_API_KEY`, and Auth0 domain and API audience environment variables.
 - The repository root has a brief README; the client README is still largely the Vite starter template.
