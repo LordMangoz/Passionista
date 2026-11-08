@@ -3,10 +3,10 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid #e6ddd6;
-  border-radius: 4px;
+  border-radius: 14px;
   background: #fff;
-  box-shadow: 0 2px 8px rgb(34 28 34 / 8%);
-  transition: box-shadow 220ms ease, transform 220ms ease;
+  box-shadow: 0 3px 12px rgb(34 28 34 / 7%);
+  transition: box-shadow 180ms ease, transform 180ms ease;
 }
 
 .clothing-card-delete,
@@ -76,7 +76,7 @@
   margin: 0 0 12px;
   padding: 7px 10px;
   border: 1px solid #cbbfba;
-  border-radius: 2px;
+  border-radius: 8px;
   background: #fff;
   color: #79565a;
   font-size: 11px;
@@ -92,9 +92,9 @@
 .clothing-card-details h2 {
   margin: 0 0 8px;
   color: #282027;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 19px;
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.25;
 }
 
@@ -121,7 +121,7 @@
 
 .tag {
   border: 0;
-  border-radius: 2px;
+  border-radius: 999px;
   background: #f3e8e4;
   color: #79565a;
   font-size: 12px;
@@ -172,7 +172,7 @@
   flex: 1;
   padding: 8px 9px;
   border: 1px solid #cbbfba;
-  border-radius: 2px;
+  border-radius: 8px;
   font: inherit;
   font-size: 12px;
 }
@@ -180,7 +180,7 @@
 .tag-add-form button {
   padding: 0 11px;
   border: 0;
-  border-radius: 2px;
+  border-radius: 8px;
   background: #282027;
   color: #fff;
   font-size: 12px;
@@ -207,5 +207,98 @@
 @media (prefers-reduced-motion: reduce) {
   .clothing-card {
     transition: none;
+  }
+
+  @media (max-width: 540px) {
+    .clothing-card {
+      border-radius: 12px;
+    }
+
+    .clothing-card:hover {
+      transform: none;
+    }
+
+    .clothing-card img {
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+    }
+
+    .clothing-card-delete,
+    .clothing-card-delete-check {
+      top: 7px;
+      width: 30px;
+      height: 30px;
+    }
+
+    .clothing-card-delete {
+      right: 7px;
+      font-size: 20px;
+    }
+
+    .clothing-card-delete-check {
+      left: 7px;
+    }
+
+    .clothing-card-details {
+      padding: 10px;
+    }
+
+    .clothing-card-select {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 7px 5px;
+      font-size: 10px;
+    }
+
+    .clothing-card-details h2 {
+      display: -webkit-box;
+      overflow: hidden;
+      margin-bottom: 5px;
+      font-size: 14px;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .clothing-card-meta {
+      display: -webkit-box;
+      overflow: hidden;
+      margin-bottom: 8px;
+      font-size: 10px;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .clothing-card-tag-row {
+      gap: 5px;
+    }
+
+    .clothing-card-tags {
+      max-height: 56px;
+      gap: 4px;
+      overflow: hidden;
+    }
+
+    .tag {
+      font-size: 10px;
+    }
+
+    .tag-delete {
+      padding: 5px 7px;
+    }
+
+    .tag-add-button {
+      width: 27px;
+      height: 27px;
+      flex-basis: 27px;
+    }
+
+    .tag-add-form {
+      gap: 5px;
+    }
+
+    .tag-add-form input {
+      padding: 7px 6px;
+      font-size: 11px;
+    }
   }
 }

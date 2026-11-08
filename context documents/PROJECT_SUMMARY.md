@@ -18,8 +18,12 @@ Passionista is a fashion and wardrobe web app. Its current experience combines a
 - The wardrobe page authenticates API requests with an Auth0 access token and displays tagged clothing items from `workspace.image_project.clothing_items`, including their source images.
 - Wardrobe uploads go to Databricks through the Express image route. Gemini tagging runs in the background; the page waits for tagging before refreshing the garment list.
 - Wardrobe cards let users add or remove style tags, saving changes to Databricks, and a category dropdown filters the visible garments.
-- Users can select wardrobe items to save a custom outfit, save a Gemini wardrobe-match recommendation from the Stylist page, and switch the wardrobe to an outfits-only view.
-- Each clothing card has an owner-scoped delete action. Pressing and holding a card enters multi-select deletion mode; deleting a garment also removes its references from saved outfits without deleting a shared source photo.
+- Users can create session-only outfit drafts from selected wardrobe items or the outfits view. Drafts render immediately and remain in session storage until explicitly saved.
+- The wardrobe's **Outfits** control opens `/outfits`, a dedicated list of named looks. Selecting a look opens `/outfit` with each piece's image and available garment details; an outfit notes area saves private notes to the outfit. The separate **Edit outfit** action opens `/outfit-creation`, where users can drag or click wardrobe items to add/remove them, rename the outfit, and save changes.
+- Saving a draft creates it in Databricks; saving edits updates the existing outfit, and deleting a draft remains session-only.
+- Stylist wardrobe-match recommendations can also be saved as outfits.
+- The `/analytics` page shows live aggregate wardrobe composition, color, season, formality, and style-tag insights to any signed-in user. Its API returns aggregate counts only, without user IDs or individual clothing records.
+- Each clothing card has an owner-scoped delete action. Pressing and holding a card enters multi-select deletion mode; cards disappear optimistically while the server deletes garment rows and removes unreferenced source photos from the Databricks volume.
 - Account data is scoped to the verified Auth0 `sub`. Different Auth0 connections have separate `sub` values and therefore separate wardrobes.
 - Photos previously saved in this browser remain in local storage but are no longer displayed in the wardrobe.
 - The `/stylist` page provides photo upload and drag-and-drop, four selectable styling questions, and a response panel.
@@ -29,8 +33,9 @@ Passionista is a fashion and wardrobe web app. Its current experience combines a
 
 - `GET /api/wardrobe` returns the signed-in user's tagged garment rows and is protected by Auth0 JWT validation.
 - `POST /api/images` uploads a photo, stores its metadata, and starts background Gemini tagging. `GET /api/images/:id/file` serves an image only to its owner.
-- `GET /api/outfits` and `POST /api/outfits` list and save outfits scoped to the verified Auth0 user. The outfits Delta table is created on first use; outfit members are validated against that user's wardrobe and source images.
-- `DELETE /api/wardrobe` deletes one or more clothing-item records belonging to the authenticated user and cleans saved outfit references.
+- `GET /api/outfits`, `POST /api/outfits`, `PUT /api/outfits/:id`, `PATCH /api/outfits/:id/notes`, and `DELETE /api/outfits/:id` list, create, update, add notes to, and delete outfits scoped to the verified Auth0 user. The outfits Delta table is created on first use and adds the notes column to an existing table; outfit members are validated against that user's wardrobe and source images.
+- `GET /api/analytics/wardrobe` returns live aggregate chart metrics across tagged wardrobes. It is protected by the app's Auth0 middleware and exposes no user-level records.
+- `DELETE /api/wardrobe` deletes one or more clothing-item records belonging to the authenticated user, updates saved outfit references, and removes source-image records and files only when no remaining garments or saved outfits use them.
 - The Databricks tables are `workspace.image_project.images` and `workspace.image_project.clothing_items`; image bytes are stored in the `image_files` volume.
 - The server requires Databricks credentials, `GEMINI_API_KEY`, and Auth0 domain and API audience environment variables.
 - The repository root has a brief README; the client README is still largely the Vite starter template.
@@ -49,8 +54,9 @@ The client also provides `npm run build` and `npm run lint`. The server package 
 
 - `client/src/App.tsx` — home, authentication-aware page selection, and landing page
 - `client/src/StylistPage.tsx` — stylist studio interactions and API request
+- `client/src/AnalyticsPage.tsx` — signed-in users' aggregate wardrobe analytics dashboard
 - `client/src/WardrobePage/Wardrobe/Wardrobe.tsx` — wardrobe data fetching and card rendering
 - `client/src/WardrobePage/ClothingCard/ClothingCard.tsx` — individual clothing card
 - `server/server.ts` — Express app and API route registration
 - `server/routes/imageRouter.ts` — authenticated image, wardrobe, and stylist API routes
-- `server/databricks.ts` — Databricks SQL and volume-file client
+- `server/routes/imageRouter.ts` — authenticated image, wardrobe, stylist, and analytics API routes

@@ -1,4 +1,5 @@
 import { useAuth0 } from "@auth0/auth0-react";
+import AnalyticsPage from "./AnalyticsPage";
 import PageMenu from "./PageMenu";
 import StylistPage from "./StylistPage";
 import "./App.css";
@@ -20,7 +21,19 @@ export default function App() {
     return <StylistPage />;
   }
 
+  if (path === "/analytics") {
+    return <AnalyticsPage />;
+  }
+
   if (path === "/wardrobe") {
+    return <Wardrobe />;
+  }
+
+  if (path === "/outfits" || path === "/outfit") {
+    return <Wardrobe />;
+  }
+
+  if (path === "/outfit-creation") {
     return <Wardrobe />;
   }
 

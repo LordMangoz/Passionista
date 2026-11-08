@@ -46,7 +46,7 @@
 	min-width: 180px;
 	padding: 12px 36px 12px 12px;
 	border: 1px solid #cbbfba;
-	border-radius: 2px;
+	border-radius: 10px;
 	background: #fff;
 	color: #282027;
 	font: inherit;
@@ -63,10 +63,10 @@
 
 .wardrobe-toolbar h1 {
 	margin: 0;
-	font-family: Georgia, "Times New Roman", serif;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
 	font-size: clamp(38px, 5vw, 64px);
-	font-weight: 400;
-	letter-spacing: -0.055em;
+	font-weight: 600;
+	letter-spacing: -0.045em;
 	line-height: 1.1;
 }
 
@@ -79,6 +79,7 @@
 	gap: 18px;
 	padding: 14px 18px;
 	border: 0;
+	border-radius: 10px;
 	background: #282027;
 	color: #fff;
 	font-size: 12px;
@@ -107,6 +108,7 @@
 	margin-bottom: 28px;
 	padding: 20px;
 	border: 1px solid #e6ddd6;
+	border-radius: 16px;
 	background: #fff;
 }
 
@@ -127,6 +129,7 @@
 	justify-content: center;
 	padding: 25px;
 	border: 1px dashed #cbbfba;
+	border-radius: 14px;
 	background: #f8f3ed;
 	text-align: center;
 }
@@ -150,9 +153,9 @@
 
 .wardrobe-drop-zone h2 {
 	margin: 0 0 7px;
-	font-family: Georgia, "Times New Roman", serif;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
 	font-size: 25px;
-	font-weight: 400;
+	font-weight: 600;
 }
 
 .wardrobe-drop-zone p {
@@ -164,6 +167,7 @@
 .wardrobe-drop-zone button {
 	padding: 13px 18px;
 	border: 0;
+	border-radius: 10px;
 	background: #282027;
 	color: #fff;
 	font-size: 12px;
@@ -255,6 +259,7 @@
 	margin: 0 0 20px;
 	padding: 14px;
 	border: 1px solid #e6ddd6;
+	border-radius: 14px;
 	background: #fff;
 }
 
@@ -269,6 +274,7 @@
 	flex: 1;
 	padding: 10px;
 	border: 1px solid #cbbfba;
+	border-radius: 9px;
 	font: inherit;
 	font-size: 12px;
 }
@@ -276,6 +282,7 @@
 .outfit-selection-bar button {
 	padding: 12px 16px;
 	border: 0;
+	border-radius: 9px;
 	background: #282027;
 	color: #fff;
 	font-size: 12px;
@@ -328,58 +335,434 @@
 	font-size: 11px;
 }
 
-.saved-outfit-grid {
+.outfit-card-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-	gap: 20px;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+	gap: 18px;
 }
 
-.saved-outfit-card {
+.outfit-card {
+	position: relative;
 	min-width: 0;
-	padding: 18px;
+	padding: 14px;
 	border: 1px solid #e6ddd6;
+	border-radius: 16px;
 	background: #fff;
 }
 
-.saved-outfit-card h2 {
-	margin: 0 0 6px;
-	font-family: Georgia, "Times New Roman", serif;
-	font-size: 24px;
-	font-weight: 400;
+.outfit-card-link {
+	display: block;
+	color: inherit;
+	text-decoration: none;
 }
 
-.saved-outfit-card > p {
-	margin: 0 0 14px;
+.outfit-card-link:hover h2 {
+	color: #79565a;
+}
+
+.outfit-card-images {
+	display: flex;
+	height: 190px;
+	gap: 6px;
+	overflow: hidden;
+	border-radius: 10px;
+	background: #f8f3ed;
+}
+
+.outfit-card-images img {
+	min-width: 0;
+	flex: 1 1 0;
+	object-fit: contain;
+}
+
+.outfit-card h2 {
+	overflow: hidden;
+	margin: 12px 0 5px;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	font-size: 22px;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.outfit-card-link > span {
 	color: #686868;
 	font-size: 11px;
 }
 
-.saved-outfit-images {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-	gap: 10px;
+.outfit-card-delete {
+	margin-top: 12px;
+	padding: 6px 0;
+	border: 0;
+	background: none;
+	color: #79565a;
+	font-size: 11px;
+	font-weight: 700;
+	text-decoration: underline;
 }
 
-.saved-outfit-images figure {
+.outfit-card-edit {
+	display: inline-block;
+	margin: 12px 16px 0 0;
+	padding: 6px 0;
+	color: #282027;
+	font-size: 11px;
+	font-weight: 700;
+	text-decoration: underline;
+}
+
+.outfit-detail-page {
+	max-width: 1000px;
+	margin: 0 auto;
+}
+
+.outfit-detail-heading {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 18px;
+	margin-bottom: 22px;
+	padding-bottom: 18px;
+	border-bottom: 1px solid #e6ddd6;
+}
+
+.outfit-detail-heading > div > p,
+.outfit-notes > div:first-child > p {
+	margin: 0 0 7px;
+	color: #79565a;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+}
+
+.outfit-detail-heading h2 {
+	margin: 0;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	font-size: clamp(30px, 4vw, 46px);
+	font-weight: 600;
+}
+
+.outfit-draft-label {
+	padding: 7px 10px;
+	background: #f3e8e4;
+	color: #79565a;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.outfit-detail-pieces {
+	display: grid;
+	gap: 12px;
+}
+
+.outfit-detail-piece {
+	display: grid;
+	grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+	align-items: center;
+	gap: 22px;
+	padding: 14px;
+	border: 1px solid #e6ddd6;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.outfit-detail-piece > img {
+	display: block;
+	width: 100%;
+	height: 220px;
+	background: #f8f3ed;
+	object-fit: contain;
+}
+
+.outfit-piece-category {
+	margin: 0 0 8px;
+	color: #79565a;
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.outfit-detail-piece h3 {
+	margin: 0 0 8px;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	font-size: 25px;
+	font-weight: 600;
+}
+
+.outfit-detail-piece p:not(.outfit-piece-category) {
+	margin: 7px 0;
+	color: #686868;
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.outfit-piece-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 12px;
+}
+
+.outfit-piece-tags span {
+	padding: 6px 9px;
+	border-radius: 20px;
+	background: #f3e8e4;
+	color: #79565a;
+	font-size: 10px;
+}
+
+.outfit-notes {
+	display: grid;
+	gap: 12px;
+	margin-top: 24px;
+	padding: 20px;
+	border: 1px solid #e6ddd6;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.outfit-notes h2 {
+	margin: 0;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	font-size: 26px;
+	font-weight: 600;
+}
+
+.outfit-notes textarea {
+	display: block;
+	width: 100%;
+	min-height: 150px;
+	resize: vertical;
+	padding: 12px;
+	border: 1px solid #cbbfba;
+	border-radius: 10px;
+	background: #fdfbf9;
+	color: #282027;
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.outfit-notes-footer {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	color: #686868;
+	font-size: 11px;
+}
+
+.outfit-notes-footer > span:first-child {
+	margin-right: auto;
+}
+
+.outfit-workspace {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.outfit-editor,
+.outfit-editor-empty {
 	min-width: 0;
+	padding: 20px;
+	border: 1px solid #e6ddd6;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.outfit-editor h3 {
+	margin: 0 0 14px;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	font-size: 24px;
+	font-weight: 600;
+}
+
+.outfit-editor-empty p {
+	color: #686868;
+	font-size: 13px;
+}
+
+.outfit-save-button:hover:not(:disabled) {
+	background: #79565a;
+}
+
+.outfit-editor-heading {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 8px;
+}
+
+.outfit-editor-heading p {
+	margin: 0 0 6px;
+	color: #79565a;
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+}
+
+.outfit-editor-heading input {
+	width: min(100%, 480px);
+	padding: 5px 0;
+	border: 0;
+	border-bottom: 1px solid #cbbfba;
+	border-radius: 0;
+	color: #282027;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	font-size: clamp(24px, 3vw, 36px);
+	font-weight: 600;
+}
+
+.outfit-save-button {
+	flex: none;
+	padding: 13px 18px;
+	border: 0;
+	border-radius: 10px;
+	background: #282027;
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.outfit-save-button:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.outfit-editor-hint {
+	margin: 12px 0 18px;
+	color: #686868;
+	font-size: 12px;
+}
+
+.outfit-drop-zone {
+	display: flex;
+	min-height: 180px;
+	align-items: flex-start;
+	gap: 12px;
+	overflow-x: auto;
+	padding: 16px;
+	border: 1px dashed #cbbfba;
+	background: #f8f3ed;
+}
+
+.outfit-drop-zone:has(> p) {
+	align-items: center;
+	justify-content: center;
+}
+
+.outfit-drop-zone > p {
+	color: #686868;
+	font-size: 12px;
+}
+
+.outfit-drop-zone figure {
+	position: relative;
+	width: 120px;
+	flex: 0 0 120px;
 	margin: 0;
 }
 
-.saved-outfit-images img {
+.outfit-drop-zone figure img {
 	display: block;
 	width: 100%;
-	height: 130px;
+	height: 140px;
 	background: #eee8e2;
 	object-fit: contain;
 }
 
-.saved-outfit-images figcaption {
+.outfit-drop-zone figcaption {
 	overflow: hidden;
 	margin-top: 5px;
 	color: #686868;
 	font-size: 10px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.outfit-remove-item {
+	position: absolute;
+	z-index: 1;
+	top: 5px;
+	right: 5px;
+	width: 26px;
+	height: 26px;
+	border: 0;
+	border-radius: 50%;
+	background: #282027;
+	color: #fff;
+	font-size: 18px;
+	line-height: 1;
+}
+
+.outfit-editor h3 {
+	margin-top: 24px;
+}
+
+.outfit-item-picker {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+	gap: 10px;
+}
+
+.outfit-picker-item {
+	display: grid;
+	min-width: 0;
+	gap: 5px;
+	padding: 8px;
+	border: 1px solid #e6ddd6;
+	border-radius: 10px;
+	background: #fff;
+	color: #282027;
+	text-align: left;
+}
+
+.outfit-picker-item:hover,
+.outfit-picker-item.is-selected {
+	border-color: #79565a;
+	background: #f8f3ed;
+}
+
+.outfit-picker-item[draggable="true"] {
+	cursor: grab;
+}
+
+.outfit-picker-item:active {
+	cursor: grabbing;
+}
+
+.outfit-picker-item img {
+	display: block;
+	width: 100%;
+	height: 110px;
+	background: #eee8e2;
+	object-fit: contain;
+}
+
+.outfit-picker-item span {
+	overflow: hidden;
+	font-size: 11px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.outfit-picker-item small {
+	color: #686868;
+	font-size: 9px;
+}
+
+.outfit-editor-empty {
+	display: grid;
+	min-height: 240px;
+	place-items: center;
+}
+
+.outfit-editor-empty p {
+	margin: 0;
+	text-align: center;
 }
 
 .wardrobe-saved-item {
@@ -432,6 +815,43 @@
 		flex-direction: column;
 	}
 
+	.outfit-workspace {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 14px;
+	}
+
+	.outfit-editor,
+	.outfit-editor-empty {
+		padding: 14px;
+	}
+
+	.outfit-editor-heading {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.outfit-detail-piece {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+	}
+
+	.outfit-detail-piece > img {
+		height: 240px;
+	}
+
+	.outfit-notes {
+		padding: 14px;
+	}
+
+	.outfit-notes-footer {
+		align-items: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.outfit-save-button {
+		align-self: flex-start;
+	}
+
 	.wardrobe-upload-panel {
 		padding: 14px;
 	}
@@ -446,6 +866,6 @@
 
 	.wardrobe-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
+		gap: 9px;
 	}
 }

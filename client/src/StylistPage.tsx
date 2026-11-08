@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import PageMenu from "./PageMenu";
 import "./StylistPage.css";
+
+const ReactMarkdown = lazy(() => import("react-markdown"));
 
 const questions = [
   {
@@ -566,8 +568,11 @@ async function getApiError(response: Response, fallback: string): Promise<string
                 {resultState === "ready" && result ? (
                     <>
                     <h3>{selectedQuestion.title}</h3>
-                    <p>{result.answer}</p>
-    
+                    <div className="stylist-markdown">
+                      <Suspense fallback={<p>{result.answer}</p>}>
+                        <ReactMarkdown>{result.answer}</ReactMarkdown>
+                      </Suspense>
+                    </div>
                     </>
                 ) : (
                     <p role={resultState === "error" ? "alert" : undefined}>

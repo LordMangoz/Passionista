@@ -104,9 +104,18 @@ async function ensureOutfitsTable(): Promise<void> {
         name STRING,
         source_image_id STRING,
         clothing_item_ids ARRAY<STRING>,
+        notes STRING,
         created_at TIMESTAMP
       ) USING DELTA
-    `).then(() => undefined).catch((error: unknown) => {
+    `).then(async () => {
+      const columns = await runStatement(`DESCRIBE TABLE ${OUTFITS_TABLE}`);
+      const hasNotesColumn = columns.some((column) =>
+        String(column[0] ?? "").toLowerCase() === "notes",
+      );
+      if (!hasNotesColumn) {
+        await runStatement(`ALTER TABLE ${OUTFITS_TABLE} ADD COLUMNS (notes STRING)`);
+      }
+    }).catch((error: unknown) => {
       outfitsTablePromise = null;
       throw error;
     });
@@ -137,6 +146,16 @@ async function getVolumeFile(path: string): Promise<Buffer> {
   });
   if (!res.ok) throw new Error(`Files API GET ${res.status}: ${await res.text()}`);
   return Buffer.from(await res.arrayBuffer());
+}
+
+/** Delete an image from its Unity Catalog volume. A missing file is already deleted. */
+async function deleteVolumeFile(path: string): Promise<void> {
+  const res = await fetch(`${DB_HOST()}/api/2.0/fs/files${encodeURI(path)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${DB_TOKEN()}` },
+  });
+  if (res.status === 404) return;
+  if (!res.ok) throw new Error(`Files API DELETE ${res.status}: ${await res.text()}`);
 }
 
 // ---------- The four statements (mirror of the notebook's Item ingest cell) ----------
@@ -770,6 +789,102 @@ imageRouter.get("/wardrobe", async (req: Request, res: Response, next: NextFunct
   }
 });
 
+/** GET /api/analytics/wardrobe — aggregate metrics across all tagged wardrobes. */
+imageRouter.get("/analytics/wardrobe", async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await runStatement(
+      `SELECT metric, label, value
+       FROM (
+         SELECT 'Wardrobe Composition' AS metric,
+                COALESCE(item.category, 'Uncategorized') AS label,
+                COUNT(*) AS value
+         FROM ${ITEMS_TABLE} AS item
+         INNER JOIN ${IMAGES_TABLE} AS source
+           ON item.image_id = source.image_id AND item.user_id = source.user_id
+         WHERE source.status = 'tagged'
+         GROUP BY COALESCE(item.category, 'Uncategorized')
+
+         UNION ALL
+
+         SELECT 'Color Palette' AS metric,
+                COALESCE(item.primary_color, 'Unspecified') AS label,
+                COUNT(*) AS value
+         FROM ${ITEMS_TABLE} AS item
+         INNER JOIN ${IMAGES_TABLE} AS source
+           ON item.image_id = source.image_id AND item.user_id = source.user_id
+         WHERE source.status = 'tagged'
+         GROUP BY COALESCE(item.primary_color, 'Unspecified')
+
+         UNION ALL
+
+         SELECT 'Season Coverage' AS metric,
+                seasons.season AS label,
+                COUNT(DISTINCT item.clothing_item_id) AS value
+         FROM ${ITEMS_TABLE} AS item
+         INNER JOIN ${IMAGES_TABLE} AS source
+           ON item.image_id = source.image_id AND item.user_id = source.user_id
+         LATERAL VIEW EXPLODE(item.season) seasons AS season
+         WHERE source.status = 'tagged'
+         GROUP BY seasons.season
+
+         UNION ALL
+
+         SELECT 'Formality Mix' AS metric,
+                COALESCE(item.formality, 'Unspecified') AS label,
+                COUNT(*) AS value
+         FROM ${ITEMS_TABLE} AS item
+         INNER JOIN ${IMAGES_TABLE} AS source
+           ON item.image_id = source.image_id AND item.user_id = source.user_id
+         WHERE source.status = 'tagged'
+         GROUP BY COALESCE(item.formality, 'Unspecified')
+
+         UNION ALL
+
+         SELECT 'Most Common Styles' AS metric,
+                styles.style AS label,
+                COUNT(DISTINCT item.clothing_item_id) AS value
+         FROM ${ITEMS_TABLE} AS item
+         INNER JOIN ${IMAGES_TABLE} AS source
+           ON item.image_id = source.image_id AND item.user_id = source.user_id
+         LATERAL VIEW EXPLODE(item.style_tags) styles AS style
+         WHERE source.status = 'tagged'
+         GROUP BY styles.style
+       )
+       ORDER BY metric, value DESC, label`
+    );
+
+    const metricNames = [
+      "Wardrobe Composition",
+      "Color Palette",
+      "Season Coverage",
+      "Formality Mix",
+      "Most Common Styles",
+    ];
+    const dataByMetric = new Map<string, { label: string; value: number }[]>(
+      metricNames.map((name) => [name, []])
+    );
+    for (const [metric, label, rawValue] of rows) {
+      const value = Number(rawValue);
+      if (metric && label && Number.isFinite(value)) {
+        dataByMetric.get(metric)?.push({ label, value });
+      }
+    }
+
+    res.json({
+      metrics: [
+        { name: "Wardrobe Composition", type: "bar", data: dataByMetric.get("Wardrobe Composition") },
+        { name: "Color Palette", type: "bar", data: dataByMetric.get("Color Palette") },
+        { name: "Season Coverage", type: "bar", data: dataByMetric.get("Season Coverage") },
+        { name: "Formality Mix", type: "pie", data: dataByMetric.get("Formality Mix") },
+        { name: "Most Common Styles", type: "table", data: dataByMetric.get("Most Common Styles") },
+      ],
+      generated_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 /** DELETE /api/wardrobe — delete selected clothing rows and clean saved outfit references. */
 imageRouter.delete("/wardrobe", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -789,58 +904,115 @@ imageRouter.delete("/wardrobe", async (req: Request, res: Response, next: NextFu
       throw new HttpError(400, "Clothing item IDs must be unique");
     }
 
-    const itemIdsJson = JSON.stringify(itemIds);
-    const ownedItems = await runStatement(
-      `SELECT COUNT(DISTINCT clothing_item_id)
-       FROM ${ITEMS_TABLE}
-       WHERE user_id = :user_id
-         AND array_contains(from_json(:item_ids_json, 'array<string>'), clothing_item_id)`,
-      [
-        { name: "user_id", value: user_id },
-        { name: "item_ids_json", value: itemIdsJson },
-      ]
+    const itemParams = itemIds.map((id, index) => ({ name: `item_${index}`, value: id }));
+    const itemPlaceholders = itemParams.map((param) => `:${param.name}`).join(", ");
+    const itemPredicate = `clothing_item_id IN (${itemPlaceholders})`;
+    const ownerParams = [{ name: "user_id", value: user_id }, ...itemParams];
+    const itemRows = await runStatement(
+      `SELECT item.clothing_item_id, item.image_id, source.file_path
+       FROM ${ITEMS_TABLE} AS item
+       LEFT JOIN ${IMAGES_TABLE} AS source
+         ON item.image_id = source.image_id AND item.user_id = source.user_id
+       WHERE item.user_id = :user_id
+         AND item.${itemPredicate}`,
+      ownerParams
     );
-    if (Number(ownedItems[0]?.[0] ?? 0) !== itemIds.length) {
+    if (itemRows.length !== itemIds.length) {
       throw new HttpError(404, "One or more clothing items were not found");
     }
 
+    const sourceImages = new Map(
+      itemRows
+        .filter((row) => row[1] && row[2])
+        .map((row) => [String(row[1]), String(row[2])]),
+    );
+
     await runStatement(
       `DELETE FROM ${ITEMS_TABLE}
-       WHERE user_id = :user_id
-         AND array_contains(from_json(:item_ids_json, 'array<string>'), clothing_item_id)`,
-      [
-        { name: "user_id", value: user_id },
-        { name: "item_ids_json", value: itemIdsJson },
-      ]
+       WHERE user_id = :user_id AND ${itemPredicate}`,
+      ownerParams
     );
 
-    await ensureOutfitsTable();
-    await runStatement(
-      `UPDATE ${OUTFITS_TABLE}
-       SET clothing_item_ids = array_except(
-         COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>)),
-         from_json(:item_ids_json, 'array<string>')
-       )
-       WHERE user_id = :user_id
-         AND array_size(clothing_item_ids) > 0
-         AND array_size(array_intersect(
-           clothing_item_ids,
-           from_json(:item_ids_json, 'array<string>')
-         )) > 0`,
-      [
-        { name: "user_id", value: user_id },
-        { name: "item_ids_json", value: itemIdsJson },
-      ]
-    );
-    await runStatement(
-      `DELETE FROM ${OUTFITS_TABLE}
-       WHERE user_id = :user_id
-         AND source_image_id IS NULL
-         AND array_size(COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>))) = 0`,
-      [{ name: "user_id", value: user_id }]
-    );
+    let warning: string | undefined;
+    try {
+      await runStatement(
+        `UPDATE ${OUTFITS_TABLE}
+         SET clothing_item_ids = array_except(
+           COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>)),
+           ARRAY(${itemPlaceholders})
+         )
+         WHERE user_id = :user_id
+           AND arrays_overlap(
+             COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>)),
+             ARRAY(${itemPlaceholders})
+           )`,
+        ownerParams
+      );
+      await runStatement(
+        `DELETE FROM ${OUTFITS_TABLE}
+         WHERE user_id = :user_id
+           AND source_image_id IS NULL
+           AND size(COALESCE(clothing_item_ids, CAST(ARRAY() AS ARRAY<STRING>))) = 0`,
+        [{ name: "user_id", value: user_id }]
+      );
+    } catch (error) {
+      console.error("[wardrobe] Clothing items deleted, but saved outfit cleanup failed:", error);
+      warning = "Clothing items were deleted, but saved outfit references could not be updated.";
+    }
 
-    res.json({ deleted_item_ids: itemIds });
+    const imageWarnings: string[] = [];
+    for (const [image_id, file_path] of sourceImages) {
+      try {
+        const remainingItems = await runStatement(
+          `SELECT clothing_item_id
+           FROM ${ITEMS_TABLE}
+           WHERE user_id = :user_id AND image_id = :image_id
+           LIMIT 1`,
+          [
+            { name: "user_id", value: user_id },
+            { name: "image_id", value: String(image_id) },
+          ]
+        );
+        if (remainingItems.length) continue;
+
+        const outfitReferences = await runStatement(
+          `SELECT outfit_id
+           FROM ${OUTFITS_TABLE}
+           WHERE user_id = :user_id AND source_image_id = :image_id
+           LIMIT 1`,
+          [
+            { name: "user_id", value: user_id },
+            { name: "image_id", value: String(image_id) },
+          ]
+        );
+        if (outfitReferences.length) continue;
+
+        try {
+          await deleteVolumeFile(String(file_path));
+        } catch (error) {
+          console.error(`[wardrobe] Could not delete image file ${String(image_id)}:`, error);
+          imageWarnings.push("Some source photos could not be removed from storage.");
+        }
+        await runStatement(
+          `DELETE FROM ${IMAGES_TABLE}
+           WHERE image_id = :image_id AND user_id = :user_id`,
+          [
+            { name: "image_id", value: String(image_id) },
+            { name: "user_id", value: user_id },
+          ]
+        );
+      } catch (error) {
+        console.error(`[wardrobe] Could not clean up source image ${String(image_id)}:`, error);
+        imageWarnings.push("Some unused source-photo records could not be cleaned up.");
+      }
+    }
+
+    res.json({
+      deleted_item_ids: itemIds,
+      ...((warning || imageWarnings.length) && {
+        warning: [warning, ...imageWarnings].filter(Boolean).join(" "),
+      }),
+    });
   } catch (e) {
     next(e);
   }
@@ -931,7 +1103,7 @@ imageRouter.get("/outfits", async (req: Request, res: Response, next: NextFuncti
     const user_id = getUserId(req);
     await ensureOutfitsTable();
     const rows = await runStatement(
-      `SELECT outfit_id, name, source_image_id, to_json(clothing_item_ids), created_at
+      `SELECT outfit_id, name, source_image_id, to_json(clothing_item_ids), created_at, notes
        FROM ${OUTFITS_TABLE}
        WHERE user_id = :user_id
        ORDER BY created_at DESC`,
@@ -949,6 +1121,7 @@ imageRouter.get("/outfits", async (req: Request, res: Response, next: NextFuncti
         source_image_id: row[2] ? String(row[2]) : null,
         clothing_item_ids: itemIds,
         created_at: String(row[4] ?? ""),
+        notes: String(row[5] ?? ""),
       };
     }));
   } catch (e) {
@@ -964,11 +1137,19 @@ imageRouter.post("/outfits", async (req: Request, res: Response, next: NextFunct
       name?: unknown;
       source_image_id?: unknown;
       clothing_item_ids?: unknown;
+      notes?: unknown;
     };
     if (body?.name !== undefined && typeof body.name !== "string") {
       throw new HttpError(400, "Outfit name must be text");
     }
-    if (body?.source_image_id !== undefined && typeof body.source_image_id !== "string") {
+    if (body?.notes !== undefined && typeof body.notes !== "string") {
+      throw new HttpError(400, "Outfit notes must be text");
+    }
+    if (
+      body?.source_image_id !== undefined &&
+      body.source_image_id !== null &&
+      typeof body.source_image_id !== "string"
+    ) {
       throw new HttpError(400, "Invalid source image ID");
     }
     const itemIds = Array.isArray(body?.clothing_item_ids)
@@ -996,6 +1177,8 @@ imageRouter.post("/outfits", async (req: Request, res: Response, next: NextFunct
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (name.length > 80) throw new HttpError(400, "Outfit names must be 80 characters or fewer");
+    const notes = typeof body.notes === "string" ? body.notes : "";
+    if (notes.length > 4000) throw new HttpError(400, "Outfit notes must be 4,000 characters or fewer");
     const outfit_name = name || "My outfit";
 
     await ensureOutfitsTable();
@@ -1031,10 +1214,10 @@ imageRouter.post("/outfits", async (req: Request, res: Response, next: NextFunct
     const outfit_id = crypto.randomUUID();
     await runStatement(
       `INSERT INTO ${OUTFITS_TABLE}
-         (outfit_id, user_id, name, source_image_id, clothing_item_ids, created_at)
+         (outfit_id, user_id, name, source_image_id, clothing_item_ids, notes, created_at)
        VALUES (
          :outfit_id, :user_id, :name, NULLIF(:source_image_id, ''),
-         from_json(:item_ids_json, 'array<string>'), current_timestamp()
+         from_json(:item_ids_json, 'array<string>'), :notes, current_timestamp()
        )`,
       [
         { name: "outfit_id", value: outfit_id },
@@ -1042,6 +1225,7 @@ imageRouter.post("/outfits", async (req: Request, res: Response, next: NextFunct
         { name: "name", value: outfit_name },
         { name: "source_image_id", value: source_image_id },
         { name: "item_ids_json", value: JSON.stringify(itemIds) },
+        { name: "notes", value: notes },
       ]
     );
 
@@ -1050,7 +1234,184 @@ imageRouter.post("/outfits", async (req: Request, res: Response, next: NextFunct
       name: outfit_name,
       source_image_id: source_image_id || null,
       clothing_item_ids: itemIds,
+      notes,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** PUT /api/outfits/:id — replace an owned outfit's name, source image, and items. */
+imageRouter.put("/outfits/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const outfit_id = req.params.id;
+    if (typeof outfit_id !== "string") throw new HttpError(400, "Invalid outfit ID");
+    const body = req.body as {
+      name?: unknown;
+      source_image_id?: unknown;
+      clothing_item_ids?: unknown;
+      notes?: unknown;
+    };
+    if (typeof body?.name !== "string" || !body.name.trim() || body.name.trim().length > 80) {
+      throw new HttpError(400, "Outfit name must be between 1 and 80 characters");
+    }
+    if (body.notes !== undefined && typeof body.notes !== "string") {
+      throw new HttpError(400, "Outfit notes must be text");
+    }
+    const notes = typeof body.notes === "string" ? body.notes : "";
+    if (notes.length > 4000) throw new HttpError(400, "Outfit notes must be 4,000 characters or fewer");
+    if (body.source_image_id !== undefined && body.source_image_id !== null && typeof body.source_image_id !== "string") {
+      throw new HttpError(400, "Invalid source image ID");
+    }
+    if (
+      !Array.isArray(body.clothing_item_ids) ||
+      body.clothing_item_ids.length > 20 ||
+      !body.clothing_item_ids.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128)
+    ) {
+      throw new HttpError(400, "Choose up to 20 valid wardrobe items");
+    }
+
+    const itemIds = [...new Set(body.clothing_item_ids as string[])];
+    if (itemIds.length !== body.clothing_item_ids.length) {
+      throw new HttpError(400, "Wardrobe item IDs must be unique");
+    }
+    const source_image_id = typeof body.source_image_id === "string"
+      ? body.source_image_id.trim()
+      : "";
+    if (!source_image_id && itemIds.length === 0) {
+      throw new HttpError(400, "An outfit must contain at least one wardrobe item or a source image");
+    }
+
+    await ensureOutfitsTable();
+    const existing = await runStatement(
+      `SELECT outfit_id FROM ${OUTFITS_TABLE}
+       WHERE outfit_id = :outfit_id AND user_id = :user_id`,
+      [
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+    if (!existing.length) throw new HttpError(404, "Outfit not found");
+
+    const itemParams = itemIds.map((id, index) => ({ name: `item_${index}`, value: id }));
+    if (itemParams.length) {
+      const placeholders = itemParams.map((param) => `:${param.name}`).join(", ");
+      const ownedItems = await runStatement(
+        `SELECT clothing_item_id FROM ${ITEMS_TABLE}
+         WHERE user_id = :user_id AND clothing_item_id IN (${placeholders})`,
+        [{ name: "user_id", value: user_id }, ...itemParams]
+      );
+      if (ownedItems.length !== itemIds.length) {
+        throw new HttpError(400, "One or more selected items are not in your wardrobe");
+      }
+    }
+
+    if (source_image_id) {
+      const ownedImage = await runStatement(
+        `SELECT image_id FROM ${IMAGES_TABLE}
+         WHERE image_id = :image_id AND user_id = :user_id`,
+        [
+          { name: "image_id", value: source_image_id },
+          { name: "user_id", value: user_id },
+        ]
+      );
+      if (!ownedImage.length) throw new HttpError(400, "The outfit image is not in your uploads");
+    }
+
+    await runStatement(
+      `UPDATE ${OUTFITS_TABLE}
+       SET name = :name,
+           source_image_id = NULLIF(:source_image_id, ''),
+           clothing_item_ids = from_json(:item_ids_json, 'array<string>'),
+           notes = :notes
+       WHERE outfit_id = :outfit_id AND user_id = :user_id`,
+      [
+        { name: "name", value: body.name.trim() },
+        { name: "source_image_id", value: source_image_id },
+        { name: "item_ids_json", value: JSON.stringify(itemIds) },
+        { name: "notes", value: notes },
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+
+    res.json({
+      outfit_id,
+      name: body.name.trim(),
+      source_image_id: source_image_id || null,
+      clothing_item_ids: itemIds,
+      notes,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** PATCH /api/outfits/:id/notes — update only an outfit's private notes. */
+imageRouter.patch("/outfits/:id/notes", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const outfit_id = req.params.id;
+    if (typeof outfit_id !== "string") throw new HttpError(400, "Invalid outfit ID");
+    const body = req.body as { notes?: unknown };
+    if (typeof body?.notes !== "string" || body.notes.length > 4000) {
+      throw new HttpError(400, "Outfit notes must be text with 4,000 characters or fewer");
+    }
+
+    await ensureOutfitsTable();
+    const existing = await runStatement(
+      `SELECT outfit_id FROM ${OUTFITS_TABLE}
+       WHERE outfit_id = :outfit_id AND user_id = :user_id`,
+      [
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+    if (!existing.length) throw new HttpError(404, "Outfit not found");
+
+    await runStatement(
+      `UPDATE ${OUTFITS_TABLE}
+       SET notes = :notes
+       WHERE outfit_id = :outfit_id AND user_id = :user_id`,
+      [
+        { name: "notes", value: body.notes },
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+    res.json({ outfit_id, notes: body.notes });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** DELETE /api/outfits/:id — delete one outfit owned by the authenticated user. */
+imageRouter.delete("/outfits/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const outfit_id = req.params.id;
+    if (typeof outfit_id !== "string") throw new HttpError(400, "Invalid outfit ID");
+    await ensureOutfitsTable();
+    const existing = await runStatement(
+      `SELECT outfit_id FROM ${OUTFITS_TABLE}
+       WHERE outfit_id = :outfit_id AND user_id = :user_id`,
+      [
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+    if (!existing.length) throw new HttpError(404, "Outfit not found");
+
+    await runStatement(
+      `DELETE FROM ${OUTFITS_TABLE}
+       WHERE outfit_id = :outfit_id AND user_id = :user_id`,
+      [
+        { name: "outfit_id", value: outfit_id },
+        { name: "user_id", value: user_id },
+      ]
+    );
+    res.json({ outfit_id, deleted: true });
   } catch (e) {
     next(e);
   }

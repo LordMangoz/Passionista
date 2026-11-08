@@ -77,9 +77,9 @@
 
 .stylist-intro h1 {
   margin: 0;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: clamp(54px, 5.4vw, 88px);
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.07em;
   line-height: 1.06;
   white-space: nowrap;
@@ -108,6 +108,7 @@
 .stylist-panel {
   padding: 32px;
   border: 1px solid var(--stylist-line);
+  border-radius: 16px;
   background: var(--stylist-surface);
   box-shadow: none;
 }
@@ -141,9 +142,9 @@
 
 .panel-heading h2 {
   margin: 0;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 30px;
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.045em;
 }
 
@@ -158,6 +159,7 @@
 .auth-notice {
   margin: 0 0 18px;
   padding: 14px;
+  border-radius: 10px;
   background: var(--stylist-soft);
   color: var(--stylist-muted);
   font-size: 13px;
@@ -193,6 +195,7 @@
   justify-content: center;
   padding: 32px;
   border: 1px dashed var(--stylist-line);
+  border-radius: 14px;
   background: var(--stylist-soft);
   text-align: center;
   transition: border-color 0.2s, background 0.2s;
@@ -218,9 +221,9 @@
 
 .drop-zone h3 {
   margin: 0 0 9px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 27px;
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.035em;
 }
 
@@ -234,6 +237,7 @@
   min-width: 178px;
   padding: 15px 18px;
   border: 0;
+  border-radius: 10px;
   background: var(--stylist-ink);
   color: #fff;
   font-size: 12px;
@@ -263,6 +267,7 @@
 .photo-preview {
   position: relative;
   overflow: hidden;
+  border-radius: 14px;
   background: var(--stylist-soft);
 }
 
@@ -347,6 +352,7 @@
   flex-direction: column;
   padding: 17px 17px 18px;
   border: 1px solid var(--stylist-line);
+  border-radius: 12px;
   background: var(--stylist-surface);
   color: var(--stylist-ink);
   text-align: left;
@@ -373,8 +379,9 @@
 
 .question-title {
   max-width: 95%;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 18px;
+  font-weight: 600;
   line-height: 1.15;
 }
 
@@ -394,6 +401,7 @@
   margin-top: 18px;
   padding: 17px 20px;
   border: 0;
+  border-radius: 10px;
   background: var(--stylist-ink);
   color: #fff;
   font-size: 12px;
@@ -414,6 +422,7 @@
   margin-top: 22px;
   padding: 22px 24px;
   border-left: 3px solid var(--stylist-accent);
+  border-radius: 0 14px 14px 0;
   background: var(--stylist-soft);
 }
 
@@ -435,9 +444,9 @@
 
 .answer-panel h3 {
   margin: 0 0 9px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 22px;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .answer-panel p {
@@ -445,6 +454,78 @@
   color: var(--stylist-muted);
   font-size: 13px;
   line-height: 1.7;
+}
+
+.stylist-markdown {
+  color: var(--stylist-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.stylist-markdown > :first-child {
+  margin-top: 0;
+}
+
+.stylist-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.stylist-markdown p {
+  margin: 0 0 12px;
+}
+
+.stylist-markdown h1,
+.stylist-markdown h2,
+.stylist-markdown h3,
+.stylist-markdown h4 {
+  margin: 18px 0 8px;
+  color: var(--stylist-ink);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-weight: 600;
+}
+
+.stylist-markdown h1 {
+  font-size: 25px;
+}
+
+.stylist-markdown h2 {
+  font-size: 22px;
+}
+
+.stylist-markdown h3,
+.stylist-markdown h4 {
+  font-size: 19px;
+}
+
+.stylist-markdown ul,
+.stylist-markdown ol {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+
+.stylist-markdown li {
+  padding-left: 3px;
+}
+
+.stylist-markdown a {
+  color: var(--stylist-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.stylist-markdown blockquote {
+  margin: 12px 0;
+  padding: 3px 0 3px 14px;
+  border-left: 2px solid var(--stylist-accent);
+}
+
+.stylist-markdown code {
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 6%);
+  font-size: 0.92em;
   white-space: pre-wrap;
 }
 
@@ -457,9 +538,9 @@
 
 .outfit-suggestions h3 {
   margin: 0 0 5px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 23px;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .outfit-suggestions > p {

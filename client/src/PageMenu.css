@@ -55,6 +55,18 @@
   text-decoration: none;
 }
 
+.page-menu-panel > button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.page-menu-panel > button:hover:not(:disabled) {
+  background: #f0eeea;
+}
+
 .page-menu-panel a:hover,
 .page-menu-current {
   background: #f0eeea;
