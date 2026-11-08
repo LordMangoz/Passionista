@@ -5,7 +5,7 @@
  * This is the generated versio from wardrobeItem.
  */
 export type WardrobeItem = {
-  image_id: string;
+  image_id: number;
   file_name: string;
   caption: string;
   tags: string[];
