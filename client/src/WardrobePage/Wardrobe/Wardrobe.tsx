@@ -2,6 +2,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect, useState } from "react";
 import ClothingCard from "../ClothingCard/ClothingCard";
 import type { WardrobeItem } from "../WardrobeItem";
+import "./Wardrobe.css";
 /**
  * The Actual Wardrobe Page, generates
  * each item under the user's wardrobe on the database.
