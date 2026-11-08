@@ -64,11 +64,12 @@ function LandingPage({
 }: LandingPageProps) {
   return (
     <div className="landing-page">
-      <header className="site-header">
-        <a className="wordmark" href="/" aria-label="Passionista home">
+       <header className="stylist-header">
+          <a className="stylist-wordmark" href="/">
           passionista<span>.</span>
-        </a>
-        <PageMenu current="home" />
+          </a>
+          <span className="stylist-header-title">THE STYLIST STUDIO</span>
+          <PageMenu current="home" />
       </header>
 
       <main className="hero">

@@ -32,8 +32,12 @@ export default function Wardrobe() {
 
   return (
     <div className="wardrobe-page">
-      <header className="wardrobe-header">
-        <PageMenu current="wardrobe" />
+      <header className="stylist-header">
+          <a className="stylist-wordmark" href="/">
+          passionista<span>.</span>
+          </a>
+          <span className="stylist-header-title">THE STYLIST STUDIO</span>
+          <PageMenu current="wardrobe" />
       </header>
       <main className="wardrobe-content">
         <section className="wardrobe-grid" aria-label="Your wardrobe">
