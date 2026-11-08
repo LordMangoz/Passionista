@@ -9,7 +9,6 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-
 router.post("/", upload.single("image"), async (req, res) => {
   try {
     const userId = req.body.user_id;

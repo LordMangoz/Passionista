@@ -4,12 +4,22 @@ const env = (name: string): string => {
   return value;
 };
 
+type StatementResponse = {
+  statement_id?: string;
+  status?: {
+    state?: string;
+    error?: { error_code?: string; message?: string };
+  };
+  result?: { data_array?: (string | null)[][] };
+};
+
 export async function runSql(statement: string, params: Record<string, string>) {
+  const host = env("DATABRICKS_HOST").replace(/\/+$/, "");
   const headers = {
     Authorization: `Bearer ${env("DATABRICKS_TOKEN")}`,
     "Content-Type": "application/json",
   };
-  const res = await fetch(`${env("DATABRICKS_HOST")}/api/2.0/sql/statements`, {
+  const res = await fetch(`${host}/api/2.0/sql/statements`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -20,18 +30,39 @@ export async function runSql(statement: string, params: Record<string, string>) 
     }),
   });
   if (!res.ok) throw new Error(`Databricks SQL failed: ${await res.text()}`);
-  let data = await res.json();
+  let data = await res.json() as StatementResponse;
 
-  // Poll while the statement finishes (handles warehouse cold starts)
-  while (data.state === "PENDING" || data.state === "RUNNING") {
+  // The SQL Statements API returns its state under `status`.
+  let pollCount = 0;
+  while (
+    (data.status?.state === "PENDING" || data.status?.state === "RUNNING") &&
+    pollCount < 60
+  ) {
+    if (!data.statement_id) {
+      throw new Error("Databricks SQL response did not include a statement ID for polling");
+    }
+
     await new Promise((r) => setTimeout(r, 2000));
-    const poll = await fetch(`${env("DATABRICKS_HOST")}/api/2.0/sql/statements/${data.statement_id}`, {
+    const poll = await fetch(`${host}/api/2.0/sql/statements/${data.statement_id}`, {
       headers: { Authorization: headers.Authorization },
     });
-    data = await poll.json();
+    if (!poll.ok) throw new Error(`Databricks SQL polling failed: ${await poll.text()}`);
+    data = await poll.json() as StatementResponse;
+    pollCount++;
   }
 
-  if (data.state !== "SUCCEEDED") throw new Error(`SQL state: ${data.state}`);
+  const state = data.status?.state;
+  if (state !== "SUCCEEDED") {
+    if (state === "PENDING" || state === "RUNNING") {
+      throw new Error("Databricks SQL statement timed out while still running");
+    }
+    const details = data.status?.error;
+    throw new Error(
+      `Databricks SQL ${state ?? "response missing status"}${
+        details?.error_code ? ` (${details.error_code})` : ""
+      }${details?.message ? `: ${details.message}` : ""}`,
+    );
+  }
   return (data.result?.data_array ?? []) as (string | null)[][];
 }
 

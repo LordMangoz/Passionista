@@ -17,15 +17,10 @@ export default function App() {
   }
 
   if (path === "/wardrobe") {
-    return hasAuth0Config ? <AuthenticatedWardrobe /> : <Wardrobe />;
+    return hasAuth0Config ? <Wardrobe /> : <SetupNotice />;
   }
 
   return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
-}
-
-function AuthenticatedWardrobe() {
-  const { isAuthenticated, user } = useAuth0();
-  return <Wardrobe userId={isAuthenticated ? user?.sub : undefined} />;
 }
 
 function AuthExperience() {

@@ -37,8 +37,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Pull the Auth0 user id. Adjust if your middleware stores it elsewhere. */
 function getUserId(req: Request): string {
-  const sub = (req as any).auth?.sub ?? (req as any).user?.sub ?? (req as any).user?.id;
-  if (!sub) throw new HttpError(401, "Not authenticated");
+  const sub = req.auth?.payload.sub;
+  if (typeof sub !== "string") throw new HttpError(401, "Not authenticated");
   return sub;
 }
 
@@ -335,6 +335,7 @@ async function tagImageInBackground(
 
 // ---------- Routes ----------
 
+// actual upload handling to server.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -388,6 +389,161 @@ imageRouter.post("/images", upload.single("image"), async (req: Request, res: Re
   }
 });
 
+
+// answer questions for sytlist in a easy way.
+async function answerStylistQuestion(
+  base64: string,
+  mime: string,
+  prompt: string
+): Promise<string> {
+  let lastErr: unknown;
+
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY()}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: mime, data: base64 } }
+                  ]
+                }
+              ],
+              generationConfig: {
+                temperature: 0.4
+              }
+            }),
+            signal: AbortSignal.timeout(30_000)
+          }
+        );
+
+        if (res.status === 503 || res.status === 429) {
+          await sleep(1200 * attempt);
+          continue;
+        }
+
+        if (!res.ok) {
+          throw new Error(`Gemini ${model} HTTP ${res.status}: ${await res.text()}`);
+        }
+
+        const data: any = await res.json();
+
+        const answer = (data.candidates?.[0]?.content?.parts ?? [])
+          .map((p: any) => p.text ?? "")
+          .join("");
+
+        if (!answer.trim()) {
+          throw new Error("Gemini returned an empty answer");
+        }
+
+        return answer;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+  }
+
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("Gemini failed after all retries/fallbacks");
+}
+
+
+// answer for specfic question.
+// POST /api/images/:id/ask — ask Gemini a question about an uploaded image.
+imageRouter.post("/images/:id/ask", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = getUserId(req);
+    const image_id = req.params.id;
+    if (typeof image_id !== "string") throw new HttpError(400, "Invalid image ID");
+    const questionID = req.body.questionID;
+
+    // Select the appropriate prompt.
+    const prompts: Record<string, string> = {
+      identify: "Identify the clothing items in this image. Describe their appearance, colors, materials, and style.",
+
+      "my-style": "Evaluate whether the clothing in this image fits the user's personal style. Use their existing wardrobe as context. Explain why it does or does not fit.",
+
+      "wardrobe-match": "Identify which items from the user's wardrobe would match the clothing in this image. Explain why each combination works.",
+
+      "outfit-ideas": "Suggest several outfits incorporating the clothing shown in this image. Explain how to style the item, including suitable colors, clothing, and accessories."
+    };
+
+    const prompt = prompts[questionID];
+
+    if (!prompt) {
+      throw new HttpError(400, "Invalid question ID");
+    }
+
+    // Retrieve the image, ensuring it belongs to the authenticated user.
+    const imageRows = await runStatement(
+      `SELECT file_path, mime_type
+       FROM ${IMAGES_TABLE}
+       WHERE image_id = :image_id AND user_id = :user_id`,
+      [
+        { name: "image_id", value: image_id },
+        { name: "user_id", value: user_id }
+      ]
+    );
+
+    if (!imageRows.length) {
+      throw new HttpError(404, "Image not found");
+    }
+
+    // Download image bytes from Databricks.
+    const bytes = await getVolumeFile(String(imageRows[0][0]));
+    const mime = String(imageRows[0][1]);
+    const base64 = bytes.toString("base64");
+
+    // Retrieve wardrobe context for questions that need personal style information.
+    let wardrobeContext = "";
+
+    if (questionID === "my-style" || questionID === "wardrobe-match" ||   questionID === "outfit-ideas") {
+      const wardrobeRows = await runStatement(
+        `SELECT category, subcategory, primary_color, style_tags, formality, season
+         FROM ${ITEMS_TABLE}
+         WHERE user_id = :user_id
+         ORDER BY created_at DESC`,
+        [{ name: "user_id", value: user_id }]
+      );
+
+      const wardrobe = wardrobeRows.map((r) => ({
+        category: r[0],
+        subcategory: r[1],
+        primary_color: r[2],
+        style_tags: r[3],
+        formality: r[4],
+        season: r[5]
+      }));
+
+      wardrobeContext = `
+        The user's existing wardrobe:
+        ${JSON.stringify(wardrobe)}
+
+        Use this information as context. Do not invent clothing items
+        that are not present in the wardrobe.
+      `;
+    }
+
+    // Ask Gemini about the image.
+    const answer = await answerStylistQuestion(
+      base64,
+      mime,
+      `${prompt}\n\n${wardrobeContext}`
+    );
+
+    res.json({ answer });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /** GET /api/images — this user's uploads, newest first. */
 imageRouter.get("/images", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -435,6 +591,7 @@ imageRouter.get("/images/:id/file", async (req: Request, res: Response, next: Ne
     if (!rows.length) throw new HttpError(404, "Image not found");
 
     const bytes = await getVolumeFile(String(rows[0][0]));
+
     res.setHeader("Content-Type", String(rows[0][1] ?? "image/jpeg"));
     res.send(bytes);
   } catch (e) {
@@ -447,28 +604,31 @@ imageRouter.get("/wardrobe", async (req: Request, res: Response, next: NextFunct
   try {
     const user_id = getUserId(req);
     const rows = await runStatement(
-      `SELECT clothing_item_id, category, subcategory, primary_color, secondary_colors,
-              pattern, material, fit, style_tags, formality, season, image_id, created_at
-       FROM ${ITEMS_TABLE}
-       WHERE user_id = :user_id
-       ORDER BY created_at DESC`,
+      `SELECT item.clothing_item_id, item.image_id, item.category, item.subcategory,
+              item.primary_color, item.secondary_colors, item.pattern, item.material,
+              item.fit, item.style_tags, item.formality, item.season, item.created_at
+       FROM ${ITEMS_TABLE} AS item
+       INNER JOIN ${IMAGES_TABLE} AS source
+         ON item.image_id = source.image_id AND item.user_id = source.user_id
+       WHERE item.user_id = :user_id AND source.status = 'tagged'
+       ORDER BY item.created_at DESC`,
       [{ name: "user_id", value: user_id }]
     );
     res.json(
       rows.map((r) => ({
         clothing_item_id: r[0],
-        category: r[1],
-        subcategory: r[2],
-        primary_color: r[3],
-        secondary_colors: r[4] ? JSON.parse(String(r[4])) : [],
-        pattern: r[5],
-        material: r[6],
-        fit: r[7],
-        style_tags: r[8] ? JSON.parse(String(r[8])) : [],
-        formality: r[9],
-        season: r[10] ? JSON.parse(String(r[10])) : [],
-        image_id: r[11],
-        created_at: r[12],
+        image_id: r[1],
+        category: r[2] ?? "",
+        subcategory: r[3] ?? "",
+        primary_color: r[4] ?? "",
+        secondary_colors: r[5] ? JSON.parse(String(r[5])) : [],
+        pattern: r[6] ?? "",
+        material: r[7] ?? "",
+        fit: r[8] ?? "",
+        style_tags: r[9] ? JSON.parse(String(r[9])) : [],
+        formality: r[10] ?? "",
+        season: r[11] ? JSON.parse(String(r[11])) : [],
+        created_at: r[12] ?? "",
       }))
     );
   } catch (e) {

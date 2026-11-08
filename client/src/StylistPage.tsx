@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
 import PageMenu from "./PageMenu";
 import "./StylistPage.css";
 
@@ -35,9 +36,17 @@ type ResultState = "idle" | "loading" | "ready" | "unavailable" | "error";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const stylistApiUrl = import.meta.env.VITE_STYLIST_API_URL as string | undefined;
+const auth0Audience = import.meta.env.VITE_AUTH0_AUDIENCE;
 
 export default function StylistPage() {
+  const {
+    error: authError,
+    getAccessTokenSilently,
+    isAuthenticated,
+    isLoading: isAuthLoading,
+    loginWithRedirect,
+  } = useAuth0();
+  const [imageId, setImageId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -79,8 +88,11 @@ export default function StylistPage() {
       setErrorMessage("Choose an image smaller than 10 MB.");
       return;
     }
+    setImageId(null);
+
 
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    
     const nextUrl = URL.createObjectURL(nextFile);
     previewUrlRef.current = nextUrl;
     setPreviewUrl(nextUrl);
@@ -100,66 +112,130 @@ export default function StylistPage() {
 
   function removeFile() {
     clearAnalysis();
+    setImageId(null);
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     previewUrlRef.current = null;
     setPreviewUrl(null);
     setFile(null);
   }
 
-  async function askStylist() {
-    if (!file) return;
-    clearAnalysis();
+  //grabs data and passes into backend route for gemini response.
+  // posts using the question id. 
+async function askStylist() {
+  if (!file || !isAuthenticated || isAuthLoading) return;
 
-    if (!stylistApiUrl) {
-      setResultState("unavailable");
-      return;
+  clearAnalysis();
+
+  const controller = new AbortController();
+  requestRef.current = controller;
+  setResultState("loading");
+
+  try {
+    if (!auth0Audience) {
+      throw new Error("Auth0 API audience is not configured.");
     }
 
-    const controller = new AbortController();
-    requestRef.current = controller;
-    setResultState("loading");
+    const accessToken = await getAccessTokenSilently({
+      authorizationParams: { audience: auth0Audience },
+    });
+    let activeImageId = imageId;
 
-    const body = new FormData();
-    body.append("image", file);
-    body.append("questionID", selectedQuestion.id);
-    body.append("question", selectedQuestion.title);
+    // 1. Upload the image if it hasn't been uploaded yet.
+    if (!activeImageId) {
+      const uploadBody = new FormData();
+      uploadBody.append("image", file);
 
-    try {
-      const response = await fetch(stylistApiUrl, {
+      const uploadResponse = await fetch("/api/images", {
         method: "POST",
-        body,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: uploadBody,
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error("The stylist could not answer right now. Please try again.");
-      const data: unknown = await response.json();
-      if (
-        !data ||
-        typeof data !== "object" ||
-        !("answer" in data) ||
-        typeof data.answer !== "string"
-      ) {
-        throw new Error("The stylist returned an unexpected response.");
+
+      if (!uploadResponse.ok) {
+        throw new Error(await getApiError(uploadResponse, "Image upload failed"));
       }
-      const matches = "matches" in data && Array.isArray(data.matches)
-        ? data.matches.filter(
-            (match): match is { name: string; reason?: string } =>
-              match !== null &&
-              typeof match === "object" &&
-              "name" in match &&
-              typeof match.name === "string" &&
-              (!("reason" in match) || typeof match.reason === "string"),
-          )
-        : undefined;
-      setResult({ answer: data.answer, matches });
-      setResultState("ready");
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      setErrorMessage(error instanceof Error ? error.message : "Something went wrong. Please try again.");
-      setResultState("error");
-    } finally {
-      if (requestRef.current === controller) requestRef.current = null;
+
+      const uploadData = await uploadResponse.json();
+
+      if (!uploadData.image_id) {
+        throw new Error("The server did not return an image ID.");
+      }
+
+      activeImageId = uploadData.image_id;
+      setImageId(activeImageId);
+    }
+
+    // 2. Ask the stylist about the uploaded image.
+    const response = await fetch(`/api/images/${activeImageId}/ask`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        questionID: selectedQuestion.id,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(await getApiError(response, "The stylist could not answer right now"));
+    }
+
+    const data: unknown = await response.json();
+
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !("answer" in data) ||
+      typeof data.answer !== "string"
+    ) {
+      throw new Error("The stylist returned an unexpected response.");
+    }
+
+    const matches = "matches" in data && Array.isArray(data.matches)
+      ? data.matches.filter(
+          (match): match is { name: string; reason?: string } =>
+            match !== null &&
+            typeof match === "object" &&
+            "name" in match &&
+            typeof match.name === "string" &&
+            (!("reason" in match) || typeof match.reason === "string"),
+        )
+      : undefined;
+
+    setResult({ answer: data.answer, matches });
+    setResultState("ready");
+  } catch (error) {
+    if (controller.signal.aborted) return;
+
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "Something went wrong. Please try again."
+    );
+
+    setResultState("error");
+  } finally {
+    if (requestRef.current === controller) {
+      requestRef.current = null;
     }
   }
+}
+
+async function getApiError(response: Response, fallback: string): Promise<string> {
+  if (response.headers.get("content-type")?.includes("application/json")) {
+    const data: unknown = await response.json();
+    if (data && typeof data === "object" && "error" in data && typeof data.error === "string") {
+      return data.error;
+    }
+  }
+
+  return `${fallback} (HTTP ${response.status})`;
+}
 
     return (
         <div className="stylist-page">
@@ -199,8 +275,9 @@ export default function StylistPage() {
                 ref={inputRef}
                 type="file"
                 className="visually-hidden"
-                accept="image/jpeg,image/png"
+                accept="image/jpeg,image/png,image/webp"
                 aria-label="Upload a clothing photo"
+                disabled={!isAuthenticated || isAuthLoading}
                 onChange={handleInputChange}
                 />
     
@@ -235,7 +312,10 @@ export default function StylistPage() {
                     e.preventDefault();
                     setIsDragging(false);
                     }}
-                    onDrop={handleDrop}
+                    onDrop={(event) => {
+                      if (isAuthenticated && !isAuthLoading) handleDrop(event);
+                      else event.preventDefault();
+                    }}
                 >
                     <div className="upload-icon" aria-hidden="true">↑</div>
                     <h3>Drop your photo here</h3>
@@ -245,6 +325,7 @@ export default function StylistPage() {
                     className="upload-button"
                     type="button"
                     onClick={() => inputRef.current?.click()}
+                    disabled={!isAuthenticated || isAuthLoading}
                     >
                     Choose a photo <span aria-hidden="true">↗</span>
                     </button>
@@ -265,6 +346,25 @@ export default function StylistPage() {
                 </div>
     
                 <p className="panel-description">Helping you make decisions~</p>
+
+                {isAuthLoading ? (
+                  <p className="auth-notice" role="status">Checking your sign-in…</p>
+                ) : !isAuthenticated ? (
+                  <div className="auth-notice" role="alert">
+                    <p>
+                      {authError?.message ?? "Sign in before choosing a photo and asking the stylist."}
+                    </p>
+                    <button
+                      className="ask-button"
+                      type="button"
+                      onClick={() => void loginWithRedirect({ appState: { returnTo: "/stylist" } })}
+                    >
+                      Sign in to continue <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                ) : authError ? (
+                  <p className="upload-error" role="alert">{authError.message}</p>
+                ) : null}
     
                 <div className="question-grid" role="group" aria-label="Stylist questions">
                 {questions.map((question) => (
@@ -273,7 +373,7 @@ export default function StylistPage() {
                     type="button"
                     className={`question-card ${selectedQuestionId === question.id ? "is-selected" : ""}`}
                     aria-pressed={selectedQuestionId === question.id}
-                    onClick={() => {
+                    onClick={async () => {
                         setSelectedQuestionId(question.id);
                         clearAnalysis();
                     }}
@@ -288,7 +388,7 @@ export default function StylistPage() {
                 className="ask-button"
                 type="button"
                 onClick={askStylist}
-                disabled={!file || resultState === "loading"}
+                disabled={!file || !isAuthenticated || isAuthLoading || resultState === "loading"}
                 >
                 {resultState === "loading" ? "Thinking…" : "Ask about this piece"}
                 <span aria-hidden="true">→</span>
@@ -348,4 +448,3 @@ export default function StylistPage() {
     
 
     }
-

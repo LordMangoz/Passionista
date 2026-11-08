@@ -155,6 +155,23 @@
   line-height: 1.65;
 }
 
+.auth-notice {
+  margin: 0 0 18px;
+  padding: 14px;
+  background: var(--stylist-soft);
+  color: var(--stylist-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-notice p {
+  margin: 0;
+}
+
+.auth-notice .ask-button {
+  margin-top: 12px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

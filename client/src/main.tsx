@@ -14,6 +14,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <Auth0Provider
         domain={auth0Domain}
         clientId={auth0ClientId}
+        cacheLocation="localstorage"
+        onRedirectCallback={(appState) => {
+          window.history.replaceState(
+            {},
+            document.title,
+            appState?.returnTo ?? window.location.pathname,
+          );
+        }}
         authorizationParams={{
           redirect_uri: window.location.origin,
           ...(auth0Audience ? { audience: auth0Audience } : {}),
