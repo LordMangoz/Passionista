@@ -1,4 +1,5 @@
 import { useAuth0 } from "@auth0/auth0-react";
+import StylistPage from "./StylistPage";
 import "./App.css";
 import Wardrobe from "./WardrobePage/Wardrobe/Wardrobe";
 
@@ -8,6 +9,10 @@ const hasAuth0Config = Boolean(
 );
 
 export default function App() {
+  if (window.location.pathname.replace(/\/$/, "") === "/stylist") {
+    return <StylistPage />;
+  }
+
   return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
 }
 
