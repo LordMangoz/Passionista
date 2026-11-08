@@ -160,128 +160,191 @@ export default function StylistPage() {
     }
   }
 
-  return (
-    <div className="stylist-page">
-      <header className="stylist-header">
-        <a className="stylist-wordmark" href="/" aria-label="Passionista home">
-          passionista<span>.</span>
-        </a>
-        <span className="stylist-header-title">THE STYLIST STUDIO</span>
-        <a className="stylist-home-link" href="/">Back to home <span aria-hidden="true"></span></a>
-      </header>
-
-      <main className="stylist-main">
-        <section className="stylist-intro" aria-labelledby="stylist-title">
-          <div>
-            <p className="stylist-eyebrow"><span /> YOUR STYLE, IN THE MOMENT</p>
-            <h1 id="stylist-title">Meet your <em>stylist.</em></h1>
-          </div>
-        </section>
-
-        <div className="stylist-workspace">
-          <section className="stylist-panel upload-panel" aria-labelledby="upload-title">
-            <div className="panel-heading">
-              <span className="step-number">01</span>
-              <div><h2 id="upload-title">Add a photo</h2></div>
+    return (
+        <div className="stylist-page">
+    
+        <header className="stylist-header">
+            <a className="stylist-wordmark" href="/">
+            passionista<span>.</span>
+            </a>
+            <span className="stylist-header-title">THE STYLIST STUDIO</span>
+            <a className="stylist-home-link" href="/">Back to home</a>
+        </header>
+    
+        <main className="stylist-main">
+    
+            <section className="stylist-intro" aria-labelledby="stylist-title">
+            <div>
+                <p className="stylist-eyebrow">
+                <span /> YOUR STYLE, IN THE MOMENT
+                </p>
+                <h1 id="stylist-title">Meet your <em>stylist.</em></h1>
             </div>
-            <p className="panel-description">Upload a photo of the piece you found.</p>
-
-            <input
-              ref={inputRef}
-              className="visually-hidden"
-              type="file"
-              accept="image/jpeg,image/png"
-              aria-label="Upload a clothing photo"
-              onChange={handleInputChange}
-            />
-
-            {previewUrl ? (
-              <div className="photo-preview">
-                <img src={previewUrl} alt="The clothing item you uploaded" />
-                <div className="photo-overlay">
-                  <span className="photo-name" title={file?.name}>{file?.name}</span>
-                  <div className="photo-actions">
-                    <button type="button" onClick={() => inputRef.current?.click()}>Replace</button>
-                    <button type="button" onClick={removeFile}>Remove</button>
-                  </div>
+            </section>
+    
+            <div className="stylist-workspace">
+    
+            <section className="stylist-panel upload-panel" aria-labelledby="upload-title">
+                <div className="panel-heading">
+                <span className="step-number">01</span>
+                <div><h2 id="upload-title">Add a photo</h2></div>
                 </div>
-              </div>
-            ) : (
-              <div
-                className={isDragging ? "drop-zone is-dragging" : "drop-zone"}
-                onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
-                onDragOver={(event) => event.preventDefault()}
-                onDragLeave={(event) => { event.preventDefault(); setIsDragging(false); }}
-                onDrop={handleDrop}
-              >
-                <div className="upload-icon" aria-hidden="true">↑</div>
-                <h3>Drop your photo here</h3>
-                <p>or browse your files to get started</p>
-                <button className="upload-button" type="button" onClick={() => inputRef.current?.click()}>Choose a photo <span aria-hidden="true">↗</span></button>
-                <span className="file-hint">JPG or PNG · UP TO 10 MB</span>
-              </div>
-            )}
-            {errorMessage && resultState === "idle" && <p className="upload-error" role="alert">{errorMessage}</p>}
-            <div className="upload-footnote"><span aria-hidden="true">✳</span> Your photo is only sent when you ask a question.</div>
-          </section>
-
-          <section className="stylist-panel questions-panel" aria-labelledby="questions-title">
-            <div className="panel-heading">
-              <span className="step-number">02</span>
-              <div><h2 id="questions-title">Ask your stylist</h2></div>
-            </div>
-            <p className="panel-description">Helping you make decisions~</p>
-
-            <div className="question-grid" role="group" aria-label="Stylist questions">
-              {questions.map((question) => (
-                <button
-                  className={selectedQuestionId === question.id ? "question-card is-selected" : "question-card"}
-                  key={question.id}
-                  type="button"
-                  aria-pressed={selectedQuestionId === question.id}
-                  onClick={() => {
-                    setSelectedQuestionId(question.id);
-                    clearAnalysis();
-                  }}
-                >
-                  <span className="question-number">{question.number}</span>
-                  <span className="question-title">{question.title}</span>
-                </button>
-              ))}
-            </div>
-
-            <button className="ask-button" type="button" onClick={askStylist} disabled={!file || resultState === "loading"}>
-              {resultState === "loading" ? "Thinking…" : "Ask about this piece"}
-              <span aria-hidden="true">→</span>
-            </button>
-
-            <div className="answer-panel" aria-live="polite" aria-busy={resultState === "loading"}>
-              <div className="answer-heading"><span className="answer-symbol" aria-hidden="true">✳</span><span>YOUR STYLIST SAYS</span></div>
-              {resultState === "ready" && result ? (
-                <>
-                  <h3>{selectedQuestion.title}</h3>
-                  <p>{result.answer}</p>
-                  {result.matches && result.matches.length > 0 && (
-                    <div className="wardrobe-matches">
-                      <h4>From your wardrobe</h4>
-                      <ul>{result.matches.map((match, index) => <li key={`${match.name}-${index}`}><strong>{match.name}</strong>{match.reason && <span>{match.reason}</span>}</li>)}</ul>
+    
+                <p className="panel-description">
+                Upload a photo of the piece you found.
+                </p>
+    
+                <input
+                ref={inputRef}
+                type="file"
+                className="visually-hidden"
+                accept="image/jpeg,image/png"
+                aria-label="Upload a clothing photo"
+                onChange={handleInputChange}
+                />
+    
+                {previewUrl ? (
+                <div className="photo-preview">
+                    <img src={previewUrl} alt="The clothing item you uploaded" />
+    
+                    <div className="photo-overlay">
+                    <span className="photo-name" title={file?.name}>
+                        {file?.name}
+                    </span>
+    
+                    <div className="photo-actions">
+                        <button type="button" onClick={() => inputRef.current?.click()}>
+                        Replace
+                        </button>
+                        <button type="button" onClick={removeFile}>
+                        Remove
+                        </button>
                     </div>
-                  )}
-                </>
-              ) : resultState === "loading" ? (
-                <p>Looking at your photo and putting together an answer…</p>
-              ) : resultState === "unavailable" ? (
-                <p>The AI stylist is not connected yet. Your photo has stayed in this browser.</p>
-              ) : resultState === "error" ? (
-                <p role="alert">{errorMessage}</p>
-              ) : (
-                <p>Your answer will appear here after you add a photo and ask a question.</p>
-              )}
+                    </div>
+                </div>
+                ) : (
+                <div
+                    className={`drop-zone ${isDragging ? "is-dragging" : ""}`}
+                    onDragEnter={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    }}
+                    onDrop={handleDrop}
+                >
+                    <div className="upload-icon" aria-hidden="true">↑</div>
+                    <h3>Drop your photo here</h3>
+                    <p>or browse your files to get started</p>
+    
+                    <button
+                    className="upload-button"
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    >
+                    Choose a photo <span aria-hidden="true">↗</span>
+                    </button>
+    
+                    <span className="file-hint">JPG or PNG · UP TO 10 MB</span>
+                </div>
+                )}
+    
+                {errorMessage && resultState === "idle" && (
+                <p className="upload-error" role="alert">{errorMessage}</p>
+                )}
+            </section>
+    
+            <section className="stylist-panel questions-panel" aria-labelledby="questions-title">
+                <div className="panel-heading">
+                <span className="step-number">02</span>
+                <div><h2 id="questions-title">Ask your stylist</h2></div>
+                </div>
+    
+                <p className="panel-description">Helping you make decisions~</p>
+    
+                <div className="question-grid" role="group" aria-label="Stylist questions">
+                {questions.map((question) => (
+                    <button
+                    key={question.id}
+                    type="button"
+                    className={`question-card ${selectedQuestionId === question.id ? "is-selected" : ""}`}
+                    aria-pressed={selectedQuestionId === question.id}
+                    onClick={() => {
+                        setSelectedQuestionId(question.id);
+                        clearAnalysis();
+                    }}
+                    >
+                    <span className="question-number">{question.number}</span>
+                    <span className="question-title">{question.title}</span>
+                    </button>
+                ))}
+                </div>
+    
+                <button
+                className="ask-button"
+                type="button"
+                onClick={askStylist}
+                disabled={!file || resultState === "loading"}
+                >
+                {resultState === "loading" ? "Thinking…" : "Ask about this piece"}
+                <span aria-hidden="true">→</span>
+                </button>
+    
+                <div
+                className="answer-panel"
+                aria-live="polite"
+                aria-busy={resultState === "loading"}
+                >
+                <div className="answer-heading">
+                    <span className="answer-symbol" aria-hidden="true">✳</span>
+                    <span>YOUR STYLIST SAYS</span>
+                </div>
+    
+                {resultState === "ready" && result ? (
+                    <>
+                    <h3>{selectedQuestion.title}</h3>
+                    <p>{result.answer}</p>
+    
+                    {result.matches && result.matches.length > 0 && (
+                        <div className="wardrobe-matches">
+                        <h4>From your wardrobe</h4>
+                        <ul>
+                            {result.matches.map((match, index) => (
+                            <li key={`${match.name}-${index}`}>
+                                <strong>{match.name}</strong>
+                                {match.reason && <span>{match.reason}</span>}
+                            </li>
+                            ))}
+                        </ul>
+                        </div>
+                    )}
+                    </>
+                ) : (
+                    <p role={resultState === "error" ? "alert" : undefined}>
+                    {resultState === "loading"
+                        ? "Looking at your photo and putting together an answer…"
+                        : resultState === "unavailable"
+                        ? "The AI stylist is not connected yet. Your photo has stayed in this browser."
+                        : resultState === "error"
+                        ? errorMessage
+                        : "Your answer will appear here after you add a photo and ask a question."}
+                    </p>
+                )}
+                </div>
+            </section>
             </div>
-          </section>
+        </main>
+    
+        <footer className="stylist-footer">
+            <span>PASSIONISTA</span>
+            <span>YOUR STYLE, YOUR STORY</span>
+        </footer>
         </div>
-      </main>
-      <footer className="stylist-footer"><span>PASSIONISTA</span><span>YOUR STYLE, YOUR STORY</span></footer>
-    </div>
-  );
-}
+    );
+    
+
+    }
+
