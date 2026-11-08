@@ -1,5 +1,8 @@
 .wardrobe-page {
+	display: flex;
 	min-height: 100vh;
+	min-height: 100svh;
+	flex-direction: column;
 }
 
 .wardrobe-header {
@@ -12,6 +15,7 @@
 }
 
 .wardrobe-content {
+	flex: 1;
 	padding: 28px;
 }
 

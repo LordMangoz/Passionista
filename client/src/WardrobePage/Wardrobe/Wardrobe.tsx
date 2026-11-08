@@ -52,6 +52,10 @@ export default function Wardrobe() {
         </section>
         {currentUserId && <p className="wardrobe-user-id">User ID: {currentUserId}</p>}
       </main>
+      <footer className="site-footer">
+        <span>PASSIONISTA</span>
+        <span>YOUR STYLE YOUR WAY</span>
+      </footer>
     </div>
   );
 }
