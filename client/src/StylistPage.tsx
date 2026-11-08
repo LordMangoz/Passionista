@@ -341,7 +341,7 @@ export default function StylistPage() {
     
         <footer className="stylist-footer">
             <span>PASSIONISTA</span>
-            <span>YOUR STYLE, YOUR STORY</span>
+            <span>YOUR STYLE YOUR STORY</span>
         </footer>
         </div>
     );
