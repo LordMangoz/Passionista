@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import AnalyticsPage from "./AnalyticsPage";
 import PageMenu from "./PageMenu";
@@ -81,6 +82,16 @@ function LandingPage({
   onSignIn,
   onSignUp,
 }: LandingPageProps) {
+  const [youStyleIndex, setYouStyleIndex] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      setYouStyleIndex((index) => (index + 1) % 4);
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <div className="landing-page">
        <header className="stylist-header">
@@ -94,13 +105,18 @@ function LandingPage({
       <main className="hero">
         <div className="hero-inner">
           <p className="eyebrow"><span className="eyebrow-line" /> WELCOME TO PASSIONISTA</p>
-          <h1>Style begins<br />with <em>you.</em></h1>
+          <h1>Style begins<br />with <span className={`landing-you landing-you-${youStyleIndex}`}>you.</span></h1>
           <p className="description">A space to express yourself, and make every look your own.</p>
 
           {isLoading ? (
             <p className="account-status" role="status">Checking your account…</p>
           ) : isAuthenticated ? (
-            <p className="account-status" role="status">You are signed in.</p>
+            <div className="account-actions">
+              <p className="account-status" role="status">You are signed in.</p>
+              <a className="primary-button view-wardrobe-button" href="/wardrobe">
+                View wardrobe <span aria-hidden="true">→</span>
+              </a>
+            </div>
           ) : (
             <div className="hero-actions">
               <button className="primary-button" type="button" onClick={onSignUp} disabled={needsSetup}>

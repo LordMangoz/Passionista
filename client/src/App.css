@@ -110,7 +110,10 @@ a:focus-visible {
   flex: 1;
   align-items: center;
   padding: 60px 6.5% 90px;
-  background: radial-gradient(circle at 82% 48%, #f0e1da 0, #f8f3ed 46%);
+  background-color: #f8f3ed;
+  background-image:
+    radial-gradient(circle at 82% 48%, rgb(240 225 218 / 76%) 0, transparent 46%),
+    repeating-linear-gradient(135deg, rgb(140 98 101 / 6%) 0 1px, transparent 1px 16px);
 }
 
 .hero-inner {
@@ -125,9 +128,9 @@ a:focus-visible {
   gap: 14px;
   margin: 0 0 28px;
   color: #8c6265;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.19em;
+  letter-spacing: 0.17em;
 }
 
 .eyebrow-line {
@@ -139,23 +142,60 @@ a:focus-visible {
 h1 {
   margin: 0 0 26px;
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-  font-size: clamp(72px, 8vw, 122px);
+  font-size: clamp(62px, 6.6vw, 98px);
   font-weight: 600;
-  letter-spacing: -0.065em;
+  letter-spacing: -0.06em;
   line-height: 1.02;
 }
 
-h1 em {
+.landing-you {
+  display: inline-block;
   color: #ba7275;
-  font-weight: 400;
+  transition: font-weight 500ms ease, letter-spacing 500ms ease, color 500ms ease;
+}
+
+.landing-you-0 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.landing-you-1 {
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.065em;
+}
+
+.landing-you-2 {
+  font-family: Arial, Helvetica, sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: -0.055em;
+}
+
+.landing-you-3 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-you {
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-weight: 700;
+  }
 }
 
 .description {
   max-width: 480px;
   margin: 0 0 34px;
   color: #665c61;
-  font-size: 17px;
-  line-height: 1.75;
+  font-size: 20px;
+  line-height: 1.7;
 }
 
 .hero-actions {
@@ -172,11 +212,29 @@ h1 em {
 }
 
 .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
   min-width: 150px;
   padding: 19px 23px;
   background: #282027;
   color: #fff;
   text-align: left;
+  text-decoration: none;
+}
+
+.account-actions {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+}
+
+.account-actions .account-status {
+  margin: 0;
+}
+
+.view-wardrobe-button {
+  min-width: 190px;
 }
 
 .secondary-button {
@@ -275,11 +333,11 @@ h1 em {
   }
 
   h1 {
-    font-size: clamp(62px, 13vw, 83px);
+    font-size: clamp(50px, 10.5vw, 68px);
   }
 
   .description {
-    font-size: 15px;
+    font-size: 18px;
   }
 
   .hero-visual {

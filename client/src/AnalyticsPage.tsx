@@ -99,9 +99,9 @@ export default function AnalyticsPage() {
       <main className="analytics-content">
         <div className="analytics-heading">
           <div>
-            <p className="analytics-eyebrow">YOUR STYLE, IN PERSPECTIVE</p>
-            <h1>Wardrobe insights</h1>
-            <p>Patterns across tagged pieces in community wardrobes.</p>
+            <p className="analytics-eyebrow">STYLE INSIGHTS</p>
+            <h1>Community wardrobe insights</h1>
+            <p>Aggregated statistics from tagged items across the community.</p>
           </div>
           {isAuthenticated && (
             <button className="analytics-refresh" type="button" disabled={isLoading} onClick={() => void load()}>
@@ -133,12 +133,12 @@ export default function AnalyticsPage() {
               {payload.metrics.map((metric) => (
                 <article className={`analytics-card analytics-card-${metric.type}`} key={metric.name}>
                   <div className="analytics-card-heading">
-                    <div><p>LIVE AGGREGATE</p><h2>{metric.name}</h2></div>
+                    <div><p>COMMUNITY-WIDE AGGREGATE</p><h2>{metric.name}</h2></div>
                     <span>{metric.data.length} groups</span>
                   </div>
                   {metric.type === "bar" && <BarChart data={metric.data} />}
                   {metric.type === "pie" && <PieChart data={metric.data} />}
-                  {metric.type === "table" && <StylesTable data={metric.data} />}
+                  {metric.type === "table" && <StylesBreakdown data={metric.data} />}
                 </article>
               ))}
             </section>
@@ -204,17 +204,77 @@ function PieChart({ data }: { data: DataPoint[] }) {
   );
 }
 
-function StylesTable({ data }: { data: DataPoint[] }) {
-  return data.length ? (
-    <div className="analytics-table-wrap">
-      <table className="analytics-table">
-        <thead><tr><th>Style</th><th>Pieces</th></tr></thead>
-        <tbody>
-          {data.map((point) => (
-            <tr key={point.label}><td>{point.label}</td><td>{point.value.toLocaleString()}</td></tr>
-          ))}
-        </tbody>
-      </table>
+function StylesBreakdown({ data }: { data: DataPoint[] }) {
+  const [hoveredStyle, setHoveredStyle] = useState<DataPoint | null>(null);
+  const total = data.reduce((sum, point) => sum + point.value, 0);
+  const circumference = 2 * Math.PI * 76;
+  const segments = data.map((point, index) => ({
+    point,
+    offset: data.slice(0, index).reduce((sum, previous) => sum + previous.value / total * circumference, 0),
+  }));
+
+  if (!data.length) return <p className="analytics-empty">No style tags found yet.</p>;
+
+  return (
+    <div className="analytics-styles-layout">
+      <div className="analytics-styles-chart">
+        <div className="analytics-styles-donut">
+          <svg
+            viewBox="0 0 180 180"
+            role="img"
+            aria-label={`Style tag distribution across ${total.toLocaleString()} tagged pieces`}
+          >
+            <circle className="analytics-styles-track" cx="90" cy="90" r="76" />
+            {segments.map(({ point, offset }, index) => {
+              const segmentLength = point.value / total * circumference;
+              const percentage = total ? Math.round(point.value / total * 100) : 0;
+              const label = `${point.label}: ${point.value.toLocaleString()} pieces (${percentage}%)`;
+              return (
+                <circle
+                  key={point.label}
+                  className="analytics-styles-segment"
+                  cx="90"
+                  cy="90"
+                  r="76"
+                  stroke={palette[index % palette.length]}
+                  strokeDasharray={`${segmentLength} ${circumference - segmentLength}`}
+                  strokeDashoffset={-offset}
+                  aria-label={label}
+                  role="img"
+                  tabIndex={0}
+                  onMouseEnter={() => setHoveredStyle(point)}
+                  onMouseLeave={() => setHoveredStyle(null)}
+                  onFocus={() => setHoveredStyle(point)}
+                  onBlur={() => setHoveredStyle(null)}
+                >
+                  <title>{label}</title>
+                </circle>
+              );
+            })}
+          </svg>
+          <div className="analytics-styles-donut-center">
+            <strong>{total.toLocaleString()}</strong><span>style tags</span>
+          </div>
+        </div>
+        <p className="analytics-style-hover" aria-live="polite">
+          {hoveredStyle
+            ? <><strong>{hoveredStyle.label}</strong><span>{hoveredStyle.value.toLocaleString()} pieces · {total ? Math.round(hoveredStyle.value / total * 100) : 0}%</span></>
+            : <span>Hover or focus a slice to see its style.</span>}
+        </p>
+      </div>
+      <div className="analytics-table-wrap" tabIndex={0} aria-label="Scrollable list of common styles">
+        <table className="analytics-table">
+          <thead><tr><th>Style</th><th>Pieces</th></tr></thead>
+          <tbody>
+            {data.map((point, index) => (
+              <tr key={point.label}>
+                <td><span className="analytics-style-swatch" style={{ backgroundColor: palette[index % palette.length] }} />{point.label}</td>
+                <td>{point.value.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
-  ) : <p className="analytics-empty">No style tags found yet.</p>;
+  );
 }

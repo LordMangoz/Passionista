@@ -2,7 +2,10 @@
   display: flex;
   min-height: 100svh;
   flex-direction: column;
-  background: #f8f3ed;
+  background-color: #f8f3ed;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 37px, rgb(140 98 101 / 4%) 37px 38px),
+    repeating-linear-gradient(90deg, transparent 0 37px, rgb(140 98 101 / 4%) 37px 38px);
 }
 
 .analytics-page .stylist-header {
@@ -103,6 +106,104 @@
 
 .analytics-card-table {
   grid-column: 1 / -1;
+}
+
+.analytics-card-table .analytics-card-heading {
+  margin-bottom: 20px;
+}
+
+.analytics-styles-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 34px;
+}
+
+.analytics-styles-donut {
+  position: relative;
+  display: grid;
+  width: min(100%, 240px);
+  aspect-ratio: 1;
+  place-self: center;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.analytics-styles-donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg);
+}
+
+.analytics-styles-track,
+.analytics-styles-segment {
+  fill: none;
+  stroke-width: 24px;
+}
+
+.analytics-styles-track {
+  stroke: #eee8e2;
+}
+
+.analytics-styles-segment {
+  cursor: pointer;
+  transition: opacity 140ms ease, stroke-width 140ms ease;
+}
+
+.analytics-styles-segment:hover,
+.analytics-styles-segment:focus {
+  stroke-width: 30px;
+  outline: none;
+}
+
+.analytics-styles-segment:focus-visible {
+  filter: drop-shadow(0 0 3px #30272e);
+}
+
+.analytics-styles-donut-center {
+  position: absolute;
+  inset: 20%;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  border-radius: 50%;
+  background: #fffdfa;
+  pointer-events: none;
+}
+
+.analytics-styles-donut-center strong {
+  color: #30272e;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 500;
+}
+
+.analytics-styles-donut-center span {
+  color: #817779;
+  font-size: 11px;
+}
+
+.analytics-style-hover {
+  display: grid;
+  min-height: 48px;
+  align-content: center;
+  justify-items: center;
+  gap: 3px;
+  margin: 10px 0 0;
+  color: #51484b;
+  font-size: 12px;
+  text-align: center;
+}
+
+.analytics-style-hover strong {
+  color: #30272e;
+  font-size: 14px;
+}
+
+.analytics-style-hover span {
+  color: #71696a;
 }
 
 .analytics-card-heading {
@@ -250,7 +351,12 @@
 }
 
 .analytics-table-wrap {
-  overflow-x: auto;
+  max-height: 270px;
+  overflow: auto;
+  border: 1px solid #eee8e2;
+  border-radius: 10px;
+  scrollbar-color: #cbbfba transparent;
+  scrollbar-width: thin;
 }
 
 .analytics-table {
@@ -268,10 +374,27 @@
 }
 
 .analytics-table th {
+  position: sticky;
+  top: 0;
+  background: #fffdfa;
   color: #8c6265;
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  z-index: 1;
+}
+
+.analytics-table td:first-child {
+  white-space: nowrap;
+}
+
+.analytics-style-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 9px;
+  border-radius: 50%;
+  vertical-align: 1px;
 }
 
 .analytics-table td:last-child,
@@ -370,6 +493,23 @@
 
   .analytics-pie-layout {
     gap: 18px;
+  }
+
+  .analytics-styles-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .analytics-styles-donut {
+    width: min(56vw, 200px);
+  }
+
+  .analytics-style-hover {
+    min-height: 44px;
+  }
+
+  .analytics-table-wrap {
+    max-height: 220px;
   }
 
   .analytics-donut {

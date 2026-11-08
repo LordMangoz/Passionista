@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import PageMenu from "./PageMenu";
@@ -73,6 +73,7 @@ export default function StylistPage() {
   const previewUrlRef = useRef<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const chooseFileRef = useRef<(file?: File) => void>(() => {});
   const matchImageUrlsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -88,14 +89,29 @@ export default function StylistPage() {
     };
   }, []);
 
+  useEffect(() => {
+    function handlePaste(event: ClipboardEvent) {
+      if (!isAuthenticated || isAuthLoading || !event.clipboardData) return;
+      const image = Array.from(event.clipboardData.items)
+        .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+        ?.getAsFile();
+      if (!image) return;
+      event.preventDefault();
+      chooseFileRef.current(image);
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [isAuthenticated, isAuthLoading]);
+
   const selectedQuestion = questions.find((question) => question.id === selectedQuestionId)!;
 
-  function clearMatchImages() {
+  const clearMatchImages = useCallback(() => {
     for (const url of matchImageUrlsRef.current) URL.revokeObjectURL(url);
     matchImageUrlsRef.current.clear();
-  }
+  }, []);
 
-  function clearAnalysis() {
+  const clearAnalysis = useCallback(() => {
     requestRef.current?.abort();
     clearMatchImages();
     setResult(null);
@@ -103,9 +119,9 @@ export default function StylistPage() {
     setErrorMessage("");
     setOutfitSaveMessage("");
     setOutfitSaveError("");
-  }
+  }, [clearMatchImages]);
 
-  function chooseFile(nextFile?: File) {
+  const chooseFile = useCallback((nextFile?: File) => {
     if (!nextFile) return;
     clearAnalysis();
     if (!ACCEPTED_IMAGE_TYPES.includes(nextFile.type)) {
@@ -123,7 +139,11 @@ export default function StylistPage() {
     previewUrlRef.current = nextUrl;
     setPreviewUrl(nextUrl);
     setFile(nextFile);
-  }
+  }, [clearAnalysis]);
+
+  useEffect(() => {
+    chooseFileRef.current = chooseFile;
+  }, [chooseFile]);
 
   function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
     chooseFile(event.target.files?.[0]);
@@ -134,6 +154,16 @@ export default function StylistPage() {
     event.preventDefault();
     setIsDragging(false);
     chooseFile(event.dataTransfer.files[0]);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
   }
 
   function removeFile() {
@@ -355,7 +385,7 @@ async function getApiError(response: Response, fallback: string): Promise<string
             <a className="stylist-wordmark" href="/">
             passionista<span>.</span>
             </a>
-            <span className="stylist-header-title">THE STYLIST STUDIO</span>
+            <span className="stylist-header-title">STYLING</span>
             <PageMenu current="stylist" />
         </header>
     
@@ -364,9 +394,9 @@ async function getApiError(response: Response, fallback: string): Promise<string
             <section className="stylist-intro" aria-labelledby="stylist-title">
             <div>
                 <p className="stylist-eyebrow">
-                <span /> YOUR STYLE, IN THE MOMENT
+                <span /> A SECOND OPINION
                 </p>
-                <h1 id="stylist-title">Meet your <em>stylist.</em></h1>
+                <h1 id="stylist-title">A fresh eye on your outfit.</h1>
             </div>
             </section>
     
@@ -393,8 +423,17 @@ async function getApiError(response: Response, fallback: string): Promise<string
                 />
     
                 {previewUrl ? (
-                <div className="photo-preview">
-                    <img src={previewUrl} alt="The clothing item you uploaded" />
+                <div
+                  className={`photo-preview ${isDragging ? "is-dragging" : ""}`}
+                  onDragEnter={handleDragOver}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(event) => {
+                if (isAuthenticated && !isAuthLoading) handleDrop(event);
+                else event.preventDefault();
+                  }}
+                >
+                <img src={previewUrl} alt="The clothing item you uploaded" />
     
                     <div className="photo-overlay">
                     <span className="photo-name" title={file?.name}>
@@ -403,7 +442,7 @@ async function getApiError(response: Response, fallback: string): Promise<string
     
                     <div className="photo-actions">
                         <button type="button" onClick={() => inputRef.current?.click()}>
-                        Replace
+                        Replace from gallery
                         </button>
                         <button type="button" onClick={removeFile}>
                         Remove
@@ -414,15 +453,9 @@ async function getApiError(response: Response, fallback: string): Promise<string
                 ) : (
                 <div
                     className={`drop-zone ${isDragging ? "is-dragging" : ""}`}
-                    onDragEnter={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDragLeave={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    }}
+                    onDragEnter={handleDragOver}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
                     onDrop={(event) => {
                       if (isAuthenticated && !isAuthLoading) handleDrop(event);
                       else event.preventDefault();
@@ -430,7 +463,7 @@ async function getApiError(response: Response, fallback: string): Promise<string
                 >
                     <div className="upload-icon" aria-hidden="true">↑</div>
                     <h3>Drop your photo here</h3>
-                    <p>or browse your files to get started</p>
+                        <p>Choose an image from your gallery, drag it here, or paste it</p>
     
                     <button
                     className="upload-button"
@@ -438,10 +471,10 @@ async function getApiError(response: Response, fallback: string): Promise<string
                     onClick={() => inputRef.current?.click()}
                     disabled={!isAuthenticated || isAuthLoading}
                     >
-                    Choose a photo <span aria-hidden="true">↗</span>
+                    Choose from gallery <span aria-hidden="true">↗</span>
                     </button>
     
-                    <span className="file-hint">JPG, PNG, OR WEBP · UP TO 10 MB</span>
+                    <span className="file-hint">JPG, PNG, OR WEBP · UP TO 10 MB · CTRL/⌘ + V TO PASTE</span>
                 </div>
                 )}
     
@@ -491,7 +524,7 @@ async function getApiError(response: Response, fallback: string): Promise<string
             <section className="stylist-panel questions-panel" aria-labelledby="questions-title">
                 <div className="panel-heading">
                 <span className="step-number">02</span>
-                <div><h2 id="questions-title">Ask your stylist</h2></div>
+                <div><h2 id="questions-title">Ask a question</h2></div>
                 </div>
     
                 <p className="panel-description">Helping you make decisions~</p>

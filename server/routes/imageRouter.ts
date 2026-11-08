@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
+import { FASHION_STYLE_GUIDE } from "../prompting guides/FashionStylesGuide";
 
 // ---------- Config (values read at first use to dodge the ESM lazy-env trap) ----------
 /** Read a required environment variable or fail with its name. */
@@ -239,7 +240,9 @@ WHERE image_id = :image_id AND user_id = :user_id`;
 // ---------- Gemini ----------
 
 /** Ask Gemini to identify clothing items and describe the image. */
-const GEMINI_PROMPT = `You are a fashion cataloging assistant. Analyze the attached photo.
+const GEMINI_PROMPT = `${FASHION_STYLE_GUIDE}
+
+You are a fashion cataloging assistant. Analyze the attached photo.
 Return ONLY a JSON object (no markdown fences) shaped exactly like:
 {
   "caption": "one-sentence description of the outfit or photo",
@@ -258,7 +261,11 @@ Return ONLY a JSON object (no markdown fences) shaped exactly like:
     }
   ]
 }
-List EVERY distinct clothing item visible in the photo (an image may contain several).`;
+For each item, use one primary style tag and up to two secondary style tags only
+when the visible attributes support them. Do not force a style when evidence is
+insufficient. Use visible attributes to ground the style tags, but do not add
+fields beyond the JSON schema above. List EVERY distinct clothing item visible
+in the photo (an image may contain several).`;
 
 const STRING_FIELDS = ["category", "subcategory", "primary_color", "pattern", "material", "fit", "formality"] as const;
 const ARRAY_FIELDS = ["secondary_colors", "style_tags", "season"] as const;
@@ -601,9 +608,15 @@ async function answerStylistForPhoto(
       return { answer: "Add a few pieces to your wardrobe to get matches for this item.", matches: [] };
     }
 
-    const prompt = `${voice}\n\n${STYLIST_PROMPTS[questionID]}
+    const prompt = `${FASHION_STYLE_GUIDE}\n\n${voice}
+      When discussing style, explain your recommendation using observable clothing attributes.
+      Name a primary style and up to two secondary styles only when the evidence supports them;
+      do not force a classification.
+      ${STYLIST_PROMPTS[questionID]}
       Write the answer in one or two natural sentences, at most 45 words. Keep each match reason under 12 words.
       The answer and reasons should sound like outfit advice, not a list of catalog attributes.
+      Format the answer as concise Markdown, using **bold** for key style labels when useful.
+      Keep the JSON valid and do not wrap it in Markdown fences.
       Return pieces in visual top-to-bottom order: tops or dresses, outerwear, bottoms,
       socks, shoes, then other accessories. Put socks before shoes.
       Select exact IDs only from this wardrobe catalog: ${JSON.stringify(wardrobeItems)}
@@ -669,8 +682,10 @@ async function answerStylistForPhoto(
   }
 
   const prompt = [
+    FASHION_STYLE_GUIDE,
     voice,
-    "Reply in plain text, under 45 words, or under 60 words for outfit ideas.",
+    "Reply in concise Markdown, under 45 words, or under 60 words for outfit ideas. Use **bold** for key style labels when useful; avoid headings and lists unless they improve clarity.",
+    "When discussing style, explain recommendations using observable clothing attributes. Name a primary style and up to two secondary styles only when supported by the evidence; distinguish visible details from inference and do not force a classification.",
     STYLIST_PROMPTS[questionID],
     wardrobeContext
   ].filter(Boolean).join("\n\n");

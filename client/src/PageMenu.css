@@ -1,47 +1,70 @@
 .page-menu {
   position: relative;
-  z-index: 10;
+  z-index: 20;
   margin-left: auto;
+  padding: 5px;
+  border: 1px solid rgb(230 221 214 / 90%);
+  border-radius: 999px;
+  background: rgb(255 253 250 / 96%);
+  box-shadow: 0 3px 12px rgb(46 32 35 / 7%);
 }
 
-.page-menu summary {
-  display: flex;
-  min-width: 86px;
+.page-menu-toggle {
+  display: none;
+  min-width: 112px;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 10px 12px;
-  border: 1px solid #d9d9d5;
-  color: #242424;
+  gap: 18px;
+  padding: 10px 11px 10px 16px;
+  border: 1px solid #342a31;
+  border-radius: 999px;
+  background: #342a31;
+  color: #fffaf6;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  list-style: none;
+  letter-spacing: 0.025em;
+  box-shadow: 0 4px 12px rgb(52 42 49 / 14%);
+  transition: background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
-.page-menu summary::-webkit-details-marker {
-  display: none;
+.page-menu-toggle:hover {
+  background: #8c6265;
+  border-color: #8c6265;
+  box-shadow: 0 6px 16px rgb(52 42 49 / 18%);
+  transform: translateY(-1px);
 }
 
-.page-menu summary:focus-visible {
-  outline: 2px solid #82545c;
+.page-menu-toggle:focus-visible {
+  outline: 3px solid #ba7275;
   outline-offset: 3px;
 }
 
-.page-menu[open] summary span {
+.page-menu-toggle span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 14%);
+  font-size: 15px;
+  transition: transform 160ms ease;
+}
+
+.page-menu.is-open .page-menu-toggle span {
   transform: rotate(180deg);
 }
 
 .page-menu-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  display: grid;
-  width: 220px;
-  padding: 7px;
-  border: 1px solid #d9d9d5;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  position: static;
+  display: flex;
+  width: auto;
+  align-items: center;
+  gap: 13px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .page-menu-panel > * {
@@ -49,39 +72,96 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
-  color: #242424;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #3a3036;
   font-size: 13px;
+  font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
+  transition: color 140ms ease;
 }
 
 .page-menu-panel > button {
-  width: 100%;
+  width: auto;
   border: 0;
   background: transparent;
   cursor: pointer;
   text-align: left;
 }
 
-.page-menu-panel > button:hover:not(:disabled) {
-  background: #f0eeea;
+.page-menu-panel > button:hover:not(:disabled),
+.page-menu-panel a:hover {
+  color: #a45f67;
 }
 
-.page-menu-panel a:hover,
-.page-menu-current {
-  background: #f0eeea;
+.page-menu-panel .page-menu-current {
+  color: #a45f67;
+  font-weight: 700;
 }
 
-.page-menu-disabled,
 .page-menu-panel small {
+  display: none;
   color: #686868;
-}
-
-.page-menu-disabled {
-  cursor: not-allowed;
-}
-
-.page-menu-panel small {
   font-size: 10px;
+  font-weight: 600;
   white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .page-menu {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .page-menu-toggle {
+    display: flex;
+  }
+
+  .page-menu-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    display: none;
+    width: 220px;
+    align-items: stretch;
+    gap: 0;
+    border: 1px solid #d9d9d5;
+    border-radius: 12px;
+    padding: 8px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  .page-menu.is-open .page-menu-panel {
+    display: grid;
+  }
+
+  .page-menu-panel > * {
+    justify-content: space-between;
+    padding: 12px;
+    border-color: transparent;
+    background: transparent;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+
+  .page-menu-panel .page-menu-current,
+  .page-menu-panel a:hover,
+  .page-menu-panel > button:hover:not(:disabled) {
+    border-color: transparent;
+    background: #f0eeea;
+  }
+
+  .page-menu-panel > button {
+    width: 100%;
+  }
+
+  .page-menu-panel small {
+    display: inline;
+  }
 }

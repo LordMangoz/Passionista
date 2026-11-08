@@ -33,6 +33,11 @@ export default function ClothingCard({
   onLongPress,
   onDelete,
 }: ClothingCardProps) {
+  const [optimisticTags, setOptimisticTags] = useState<{
+    source: string[];
+    value: string[];
+  } | null>(null);
+  const visibleTags = optimisticTags?.source === tags ? optimisticTags.value : tags;
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [isSavingTag, setIsSavingTag] = useState(false);
@@ -75,6 +80,10 @@ export default function ClothingCard({
   }
 
   async function changeTag(tag: string, action: TagAction) {
+    const nextTags = action === "add"
+      ? [...visibleTags, tag]
+      : visibleTags.filter((currentTag) => currentTag !== tag);
+    setOptimisticTags({ source: tags, value: nextTags });
     setIsSavingTag(true);
     setTagError("");
     try {
@@ -84,6 +93,7 @@ export default function ClothingCard({
         setIsAddingTag(false);
       }
     } catch (error) {
+      setOptimisticTags(null);
       setTagError(error instanceof Error ? error.message : "Could not update tag.");
     } finally {
       setIsSavingTag(false);
@@ -97,7 +107,7 @@ export default function ClothingCard({
       setTagError("Enter a tag first.");
       return;
     }
-    if (tags.some((current) => current.toLowerCase() === tag.toLowerCase())) {
+    if (visibleTags.some((current) => current.toLowerCase() === tag.toLowerCase())) {
       setTagError("That tag is already on this item.");
       return;
     }
@@ -161,7 +171,7 @@ export default function ClothingCard({
         )}
         <div className="clothing-card-tag-row">
           <div className="clothing-card-tags" aria-label="Style tags">
-            {tags.map((tag, index) => (
+            {visibleTags.map((tag, index) => (
               <button
                 key={`${tag}-${index}`}
                 className="tag tag-delete"
