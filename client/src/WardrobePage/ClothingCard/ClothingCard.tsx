@@ -1,4 +1,3 @@
-import { useState } from "react";
 import "./ClothingCard.css";
 
 /**
@@ -12,41 +11,26 @@ interface ClothingCardProps {
 }
 
 /**
- * Generates a card with the image, and description.
- * Clickable to open details.
- *
- * @return clickable div that links to more info about the object.
+ * Generates a clothing card whose details appear on hover or keyboard focus.
  */
-export default function ClothingCard( {
-
+export default function ClothingCard({
   imageUrl,
   description,
-  tags
-}: ClothingCardProps) 
-{
-  const [isBig, setIsBig] = useState(false);
-
-  function handleChange() {
-    setIsBig(!isBig);
-  }
-
+  tags,
+}: ClothingCardProps) {
   return (
-    <div
-      className={`clothing-card ${isBig ? "expanded" : "small"}`}
-      onClick={handleChange}
-    >
+    <article className="clothing-card" tabIndex={0}>
       <img src={imageUrl} alt={description} />
-      <a>{description}</a>
-      <p> 
-      {
-        tags.map((tag) => (
+      <div className="clothing-card-details">
+        <h2>{description}</h2>
+        <div className="clothing-card-tags" aria-label="Tags">
+          {tags.map((tag) => (
             <span key={tag} className="tag">
               {tag}
-            </span> 
-        ))
-      }
-    </p>
-      omg clothing card no way??
-    </div>
+            </span>
+          ))}
+        </div>
+      </div>
+    </article>
   );
 }

@@ -1,4 +1,5 @@
 import { useAuth0 } from "@auth0/auth0-react";
+import PageMenu from "./PageMenu";
 import StylistPage from "./StylistPage";
 import "./App.css";
 import Wardrobe from "./WardrobePage/Wardrobe/Wardrobe";
@@ -9,19 +10,26 @@ const hasAuth0Config = Boolean(
 );
 
 export default function App() {
-  if (window.location.pathname.replace(/\/$/, "") === "/stylist") {
+  const path = window.location.pathname.replace(/\/$/, "");
+
+  if (path === "/stylist") {
     return <StylistPage />;
+  }
+
+  if (path === "/wardrobe") {
+    return hasAuth0Config ? <AuthenticatedWardrobe /> : <Wardrobe />;
   }
 
   return hasAuth0Config ? <AuthExperience /> : <SetupNotice />;
 }
 
+function AuthenticatedWardrobe() {
+  const { isAuthenticated, user } = useAuth0();
+  return <Wardrobe userId={isAuthenticated ? user?.sub : undefined} />;
+}
+
 function AuthExperience() {
   const { isAuthenticated, isLoading, loginWithRedirect, logout } = useAuth0();
-
-  if (isAuthenticated) {
-    return <Wardrobe />;
-  }
 
   return (
     <LandingPage
@@ -63,26 +71,12 @@ function LandingPage({
 }: LandingPageProps) {
   return (
     <div className="landing-page">
-      <header className="site-header">
-        <a className="wordmark" href="/" aria-label="Passionista home">
+       <header className="stylist-header">
+          <a className="stylist-wordmark" href="/">
           passionista<span>.</span>
-        </a>
-        <nav className="header-actions" aria-label="Account">
-          {/* {isAuthenticated ? (
-            <button className="header-button" type="button" onClick={onSignOut}>
-              Sign out <span aria-hidden="true">↗</span>
-            </button>
-          ) : (
-            <>
-              <button className="header-link" type="button" onClick={onSignIn} disabled={needsSetup || isLoading}>
-                Sign in
-              </button>
-              <button className="header-button" type="button" onClick={onSignUp} disabled={needsSetup || isLoading}>
-                Sign up <span aria-hidden="true">↗</span>
-              </button>
-            </>
-          )} */}
-        </nav>
+          </a>
+          <span className="stylist-header-title">THE STYLIST STUDIO</span>
+          <PageMenu current="home" />
       </header>
 
       <main className="hero">
