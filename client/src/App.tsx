@@ -49,7 +49,6 @@ function LandingPage({
   needsSetup = false,
   onSignIn,
   onSignUp,
-  onSignOut,
 }: LandingPageProps) {
   return (
     <div className="landing-page">
@@ -58,7 +57,7 @@ function LandingPage({
           passionista<span>.</span>
         </a>
         <nav className="header-actions" aria-label="Account">
-          {isAuthenticated ? (
+          {/* {isAuthenticated ? (
             <button className="header-button" type="button" onClick={onSignOut}>
               Sign out <span aria-hidden="true">↗</span>
             </button>
@@ -71,7 +70,7 @@ function LandingPage({
                 Sign up <span aria-hidden="true">↗</span>
               </button>
             </>
-          )}
+          )} */}
         </nav>
       </header>
 
@@ -79,7 +78,7 @@ function LandingPage({
         <div className="hero-inner">
           <p className="eyebrow"><span className="eyebrow-line" /> WELCOME TO PASSIONISTA</p>
           <h1>Style begins<br />with <em>you.</em></h1>
-          <p className="description">A space to discover style inspiration, express yourself, and make every look your own.</p>
+          <p className="description">A space to express yourself, and make every look your own.</p>
 
           {isLoading ? (
             <p className="account-status" role="status">Checking your account…</p>
@@ -99,7 +98,6 @@ function LandingPage({
         <div className="hero-decoration" aria-hidden="true">
           <span className="decoration-ring" />
           <span className="decoration-letter">P</span>
-          <span className="decoration-star">✳</span>
         </div>
       </main>
 
